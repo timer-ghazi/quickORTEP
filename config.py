@@ -11,3 +11,6 @@ SCALE_ATOM_SPHERE = 0.4
 # Arc flattening factor: used for drawing ORTEP arcs to simulate the sphere’s curvature.
 # It controls the ratio between the minor and major axes of the arc ellipses.
 ARC_FLATTEN = 0.4
+
+# Bond thickness in ang
+BOND_THICKNESS_ANG = 0.18

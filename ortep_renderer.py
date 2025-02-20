@@ -3,7 +3,7 @@ from geometry_utils import rotate_point, project_point
 from elements_table import Elements
 from zobjects import ZAtom, ZSegment  # Our new drawable objects
 
-from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL
+from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL, BOND_THICKNESS_ANG
 
 def hex_to_rgb(hex_color):
     """
@@ -57,28 +57,16 @@ class ORTEP_MoleculeRenderer:
             except KeyError:
                 r_covalent = 1.0  # Fallback if unknown
             
-            # Compute the drawn radius in pixels using the configurable constants:
-            #   px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
-            px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
-            
-            # Compute the effective 3D radius for bond clipping.
-            #   r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
-            r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
+            ## Compute the drawn radius in pixels using the configurable constants:
+            ##   px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
+            #px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
+            #
+            ## Compute the effective 3D radius for bond clipping.
+            ##   r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
+            #r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
 
-#----             # Get the covalent radius (in Angstroms) for drawing.
-#----             # (We assume the Elements module gives us the covalent radius in Angstrom.)
-#----             try:
-#----                 r_ang = Elements.covalent_radius(atom.symbol, order="single",
-#----                                                  source="cordero", unit="Ang")
-#----             except KeyError:
-#----                 r_ang = 1.0  # Fallback if unknown
-#---- 
-#----             # Compute the drawn radius in pixels (as before)
-#----             px_r = max(2, int(r_ang * 40))
-#----             # Compute the effective 3D radius for bond clipping.
-#----             # Since the projection maps (x, y, z) -> (x * vp.scale, y * vp.scale),
-#----             # we invert that scaling:
-#----             r_eff = (r_ang * 40) / vp.scale
+            px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * vp.scale))
+            r_eff = r_covalent * SCALE_ATOM_SPHERE  # since (r_covalent * SCALE_ATOM_SPHERE * vp.scale) / vp.scale simplifies
 
             # Create a ZAtom to be drawn
             z_atom = ZAtom(
@@ -157,16 +145,30 @@ class ORTEP_MoleculeRenderer:
                 X1, Y1 = project_point(x1_3d, y1_3d, z1_3d, vp)
                 X2, Y2 = project_point(x2_3d, y2_3d, z2_3d, vp)
 
-                # Create a ZSegment for this portion of the bond.
+                # Compute bond thickness in pixels by multiplying your chosen Å thickness by vp.scale.
+                # Also ensure a minimum of 1 pixel so bonds never disappear at small zoom.
+                bond_thickness_px = max(1, int(BOND_THICKNESS_ANG * vp.scale))
+                
                 seg_obj = ZSegment(
                     x1=X1,
                     y1=Y1,
                     x2=X2,
                     y2=Y2,
                     z_value=zm,
-                    thickness=16,
+                    thickness=bond_thickness_px,  
                     color=(0, 0, 0)
                 )
+
+                # # Create a ZSegment for this portion of the bond.
+                # seg_obj = ZSegment(
+                #     x1=X1,
+                #     y1=Y1,
+                #     x2=X2,
+                #     y2=Y2,
+                #     z_value=zm,
+                #     thickness=16,
+                #     color=(0, 0, 0)
+                # )
                 render_list.append(seg_obj)
 
         return render_list
