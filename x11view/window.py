@@ -91,6 +91,15 @@ class X11Window:
             print("Window closed by user.")
             self.running = False
 
+    def handle_motion(self, evt):
+        pass
+
+    def handle_button_press(self, evt):
+        pass
+
+    def handle_button_release(self, evt):
+        pass
+
     def handle_key(self, evt):
         """
         Handle KeyPress events. Here, 'q' or 'Escape' will quit the application.
