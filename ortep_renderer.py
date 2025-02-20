@@ -27,17 +27,20 @@ class ORTEP_MoleculeRenderer:
     def build_render_list(self, ortep_molecule, vp):
         """
         Build a list of ZObject instances (ZAtom, ZSegment, etc.)
-        for all atoms and bonds. For each atom, we:
-          - Rotate its 3D coordinates.
-          - Project to 2D.
-          - Compute the drawn radius (px_r) using a fixed multiplier (40).
-          - Derive an effective 3D radius for bond clipping:
-            
-              r_eff = (r_ang * 40) / vp.scale
-
-        For each bond, we trim its ends so that the bond does not intrude
-        into the atomic sphere (using the effective radii) and subdivide
-        the remaining line into several segments.
+        for all atoms and bonds.
+        
+        For each atom:
+        - Rotate its 3D coordinates.
+        - Project to 2D.
+        - Compute the drawn radius (px_r) using the configurable scale.
+        - Compute an effective 3D radius for bond clipping:
+        
+          $r_{\text{eff}} = r_{\text{covalent}} \times \text{SCALE_ATOM_SPHERE}$
+        
+        For each bond:
+        - Trim its ends so the bond doesn't intrude into the atomic sphere.
+        - Subdivide the remaining line into several segments.
+        - Unify endpoints across segments to avoid gaps.
         """
         render_list = []
         rotated_info = []  # List of (x_rot, y_rot, z_rot, r_eff)
@@ -57,18 +60,12 @@ class ORTEP_MoleculeRenderer:
             except KeyError:
                 r_covalent = 1.0  # Fallback if unknown
             
-            ## Compute the drawn radius in pixels using the configurable constants:
-            ##   px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
-            #px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
-            #
-            ## Compute the effective 3D radius for bond clipping.
-            ##   r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
-            #r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
-
+            # Compute the drawn radius in pixels
             px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * vp.scale))
-            r_eff = r_covalent * SCALE_ATOM_SPHERE  # since (r_covalent * SCALE_ATOM_SPHERE * vp.scale) / vp.scale simplifies
+            # Compute effective 3D radius for bond clipping (in Å)
+            r_eff = r_covalent * SCALE_ATOM_SPHERE
 
-            # Create a ZAtom to be drawn
+            # Create a ZAtom for drawing
             z_atom = ZAtom(
                 x2d=x2d,
                 y2d=y2d,
@@ -86,12 +83,11 @@ class ORTEP_MoleculeRenderer:
             ai = bond.atom1
             aj = bond.atom2
 
-            # Find indices so we can retrieve the precomputed rotated info.
+            # Find indices to retrieve precomputed rotated info.
             try:
                 i = ortep_molecule.atoms.index(ai)
                 j = ortep_molecule.atoms.index(aj)
             except ValueError:
-                # If for some reason an atom isn't in the list, skip this bond.
                 continue
 
             x_i, y_i, z_i, r_i = rotated_info[i]
@@ -105,48 +101,49 @@ class ORTEP_MoleculeRenderer:
             if dist < 1e-6:
                 continue  # Avoid division by zero
 
-            # If the effective spheres overlap or just touch, skip drawing the bond.
+            # Skip bond if effective spheres overlap or touch
             if r_i + r_j >= dist:
                 continue
 
-            # Compute the parameters (t values) where the bond becomes visible.
-            # We clip t from 0 to 1 so that:
-            #   - The bond starts at a distance r_i from atom i,
-            #   - and ends r_j before atom j.
+            # Compute t values for bond visibility:
+            # Bond starts at a distance r_i from atom i and ends r_j before atom j.
             t_start = r_i / dist
-            t_end   = 1.0 - (r_j / dist)
+            t_end = 1.0 - (r_j / dist)
 
-            # Subdivide the visible portion into N segments for smooth occlusion.
+            # Subdivide the visible portion into N segments
             N = 6
             dt = (t_end - t_start) / N
             if dt <= 0:
-                continue  # Should not happen, but safety first
+                continue
 
+            # Generate N+1 points along the bond in 3D
+            points_3d = []
+            for seg_index in range(N+1):
+                t = t_start + seg_index * dt
+                x_3d = x_i + vx * t
+                y_3d = y_i + vy * t
+                z_3d = z_i + vz * t
+                points_3d.append((x_3d, y_3d, z_3d))
+
+            # Determine coordinate type based on view parameters.
+            # For SVG export, we want float coordinates.
+            as_float = getattr(vp, "as_float", False)
+
+            # Project all 3D points to 2D once
+            projected_points = []
+            for (px, py, pz) in points_3d:
+                X, Y = project_point(px, py, pz, vp, as_float=as_float)
+                projected_points.append((X, Y, pz))
+
+            # Build bond segments using consecutive projected points
             for seg_index in range(N):
-                # Determine parameters for the segment endpoints
-                t1 = t_start + seg_index * dt
-                t2 = t_start + (seg_index + 1) * dt
+                (X1, Y1, Z1) = projected_points[seg_index]
+                (X2, Y2, Z2) = projected_points[seg_index+1]
 
-                # Compute 3D endpoints for this bond segment
-                x1_3d = x_i + vx * t1
-                y1_3d = y_i + vy * t1
-                z1_3d = z_i + vz * t1
+                # Use the midpoint z for painter's sorting
+                zm = 0.5 * (Z1 + Z2)
 
-                x2_3d = x_i + vx * t2
-                y2_3d = y_i + vy * t2
-                z2_3d = z_i + vz * t2
-
-                # Use the midpoint for z-sorting
-                xm = 0.5 * (x1_3d + x2_3d)
-                ym = 0.5 * (y1_3d + y2_3d)
-                zm = 0.5 * (z1_3d + z2_3d)
-
-                # Project the endpoints to 2D
-                X1, Y1 = project_point(x1_3d, y1_3d, z1_3d, vp)
-                X2, Y2 = project_point(x2_3d, y2_3d, z2_3d, vp)
-
-                # Compute bond thickness in pixels by multiplying your chosen Å thickness by vp.scale.
-                # Also ensure a minimum of 1 pixel so bonds never disappear at small zoom.
+                # Compute bond thickness in pixels
                 bond_thickness_px = max(1, int(BOND_THICKNESS_ANG * vp.scale))
                 
                 seg_obj = ZSegment(
@@ -158,24 +155,13 @@ class ORTEP_MoleculeRenderer:
                     thickness=bond_thickness_px,  
                     color=(0, 0, 0)
                 )
-
-                # # Create a ZSegment for this portion of the bond.
-                # seg_obj = ZSegment(
-                #     x1=X1,
-                #     y1=Y1,
-                #     x2=X2,
-                #     y2=Y2,
-                #     z_value=zm,
-                #     thickness=16,
-                #     color=(0, 0, 0)
-                # )
                 render_list.append(seg_obj)
 
         return render_list
 
     def _get_atom_color(self, atom):
         """
-        Helper: returns the RGB color tuple for an atom using the Elements module.
+        Returns the RGB color tuple for an atom using the Elements module.
         """
         try:
             hexcol = Elements.color(atom.symbol, palette="Rasmol")
@@ -186,16 +172,15 @@ class ORTEP_MoleculeRenderer:
 
     def draw_molecule(self, canvas, ortep_molecule, view_params):
         """
-        High-level method to draw the molecule: we build a list of
-        ZObjects, sort them by z_value (farthest first), and then
-        draw them in order.
+        Draw the molecule by building a render list (ZObjects), sorting them by z-value,
+        and drawing them in order.
         """
         # 1) Build the render list (atoms + bond segments)
         z_list = self.build_render_list(ortep_molecule, view_params)
 
-        # 2) Sort by z_value descending (farthest first)
+        # 2) Sort objects by z-value (farthest first)
         z_list.sort(key=lambda obj: obj.z_value, reverse=True)
 
-        # 3) Draw all objects
+        # 3) Draw each object
         for obj in z_list:
             obj.draw(canvas)

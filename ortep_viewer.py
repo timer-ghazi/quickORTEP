@@ -5,6 +5,7 @@ import time
 from Xlib import XK, X
 
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
+from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
 
 class ViewParams:
@@ -19,6 +20,7 @@ class ViewParams:
         self.scale = scale
         self.x_offset = x_offset
         self.y_offset = y_offset
+        self.as_float = False   # default
 
 class MoleculeViewer(X11Window):
     """
@@ -100,6 +102,8 @@ class MoleculeViewer(X11Window):
             self.view_params.scale *= 1.05
         elif keychar == 'm':
             self.view_params.scale /= 1.05
+        elif keychar == 's':
+            self.dump_svg()
         else:
             print(f"Ignored key: {keychar}")
 
@@ -171,6 +175,25 @@ class MoleculeViewer(X11Window):
     def handle_button_release(self, evt):
         # Reset the active button when the button is released.
         self.active_button = None
+
+    def dump_svg(self):
+        # Create an SVG canvas
+        svg_canvas = SVGCanvas(width=self.canvas.width, height=self.canvas.height)
+    
+        # Temporarily tell the renderer we want float coords
+        self.view_params.as_float = True
+    
+        # Render to the SVG canvas
+        self.renderer.draw_molecule(svg_canvas, self.ortep_mol, self.view_params)
+    
+        # Turn it off again so normal X11 drawing stays integer-based
+        self.view_params.as_float = False
+    
+        # Write the SVG content
+        filename = "quickORTEP_export.svg"
+        svg_canvas.flush(filename)
+        # print(f"SVG export saved to {filename}")
+
 
     def reset_view(self):
         # Reset view parameters to their defaults.

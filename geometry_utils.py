@@ -27,12 +27,18 @@ def rotate_point(x, y, z, rx_deg, ry_deg, rz_deg):
 
     return (x4, y4, z3)
 
-def project_point(x, y, z, view_params):
+
+def project_point(x, y, z, view_params, as_float=False):
     """
     Takes the rotated 3D point (x, y, z) and projects it onto the 2D screen
-    using the scale and offsets in view_params.
-    Returns (X_screen, Y_screen) as integers.
+    using the scale and offsets in view_params. Returns (X_screen, Y_screen).
+    If as_float=True, returns floating-point coords. Otherwise, integer coords.
     """
-    X_screen = int(x * view_params.scale + view_params.x_offset)
-    Y_screen = int(y * view_params.scale + view_params.y_offset)
+    X_screen = x * view_params.scale + view_params.x_offset
+    Y_screen = y * view_params.scale + view_params.y_offset
+
+    if not as_float:
+        X_screen = int(X_screen)
+        Y_screen = int(Y_screen)
+
     return (X_screen, Y_screen)
