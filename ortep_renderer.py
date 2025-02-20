@@ -3,6 +3,8 @@ from geometry_utils import rotate_point, project_point
 from elements_table import Elements
 from zobjects import ZAtom, ZSegment  # Our new drawable objects
 
+from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL
+
 def hex_to_rgb(hex_color):
     """
     Helper to convert a #RRGGBB string into an (R,G,B) tuple.
@@ -48,20 +50,35 @@ class ORTEP_MoleculeRenderer:
             # Project to 2D screen coordinates
             x2d, y2d = project_point(x_rot, y_rot, z_rot, vp)
 
-            # Get the covalent radius (in Angstroms) for drawing.
-            # (We assume the Elements module gives us the covalent radius in Angstrom.)
+            # Get the covalent radius (in Angstroms)
             try:
-                r_ang = Elements.covalent_radius(atom.symbol, order="single",
-                                                 source="cordero", unit="Ang")
+                r_covalent = Elements.covalent_radius(atom.symbol, order="single",
+                                                       source="cordero", unit="Ang")
             except KeyError:
-                r_ang = 1.0  # Fallback if unknown
-
-            # Compute the drawn radius in pixels (as before)
-            px_r = max(2, int(r_ang * 40))
+                r_covalent = 1.0  # Fallback if unknown
+            
+            # Compute the drawn radius in pixels using the configurable constants:
+            #   px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
+            px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL))
+            
             # Compute the effective 3D radius for bond clipping.
-            # Since the projection maps (x, y, z) -> (x * vp.scale, y * vp.scale),
-            # we invert that scaling:
-            r_eff = (r_ang * 40) / vp.scale
+            #   r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
+            r_eff = (r_covalent * SCALE_ATOM_SPHERE * ANGSTROM_TO_PIXEL) / vp.scale
+
+#----             # Get the covalent radius (in Angstroms) for drawing.
+#----             # (We assume the Elements module gives us the covalent radius in Angstrom.)
+#----             try:
+#----                 r_ang = Elements.covalent_radius(atom.symbol, order="single",
+#----                                                  source="cordero", unit="Ang")
+#----             except KeyError:
+#----                 r_ang = 1.0  # Fallback if unknown
+#---- 
+#----             # Compute the drawn radius in pixels (as before)
+#----             px_r = max(2, int(r_ang * 40))
+#----             # Compute the effective 3D radius for bond clipping.
+#----             # Since the projection maps (x, y, z) -> (x * vp.scale, y * vp.scale),
+#----             # we invert that scaling:
+#----             r_eff = (r_ang * 40) / vp.scale
 
             # Create a ZAtom to be drawn
             z_atom = ZAtom(

@@ -1,5 +1,8 @@
 # zobjects.py
 
+from config import ARC_FLATTEN
+
+
 class ZObject:
     """
     Abstract base for anything that has a 3D depth (z_value) and can draw itself on the 2D canvas.
@@ -31,19 +34,17 @@ class ZAtom(ZObject):
 
         # ORTEP arcs
         MERIDIAN_THICK = 2
-        H_FLATTEN = 0.4
-
-        # horizontal ellipse (front half: 180..360)
+        
+        # Use ARC_FLATTEN from config for the ORTEP arcs
         canvas.draw_arc(
             self.x2d, self.y2d, 
-            self.radius, int(self.radius * H_FLATTEN),
+            self.radius, int(self.radius * ARC_FLATTEN),
             angle_start_deg=180, angle_end_deg=360,
             color=(0,0,0), thickness=MERIDIAN_THICK
         )
-        # vertical ellipse (front half: 270..450)
         canvas.draw_arc(
             self.x2d, self.y2d, 
-            int(self.radius * H_FLATTEN), self.radius,
+            int(self.radius * ARC_FLATTEN), self.radius,
             angle_start_deg=270, angle_end_deg=450,
             color=(0,0,0), thickness=MERIDIAN_THICK
         )
