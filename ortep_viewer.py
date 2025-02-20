@@ -1,5 +1,8 @@
+# ortep_viewer.py
+
 import sys
-from Xlib import XK
+import time
+from Xlib import XK, X
 
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from ortep_renderer import ORTEP_MoleculeRenderer
@@ -20,7 +23,7 @@ class ViewParams:
 class MoleculeViewer(X11Window):
     """
     The 'controller/view' class that manages an ORTEP_Molecule, an ORTEP_MoleculeRenderer,
-    and handles user events (key presses), etc.
+    and handles user events (key presses, mouse events, etc.).
     """
 
     def __init__(self, ortep_molecule, width=800, height=600,
@@ -53,27 +56,19 @@ class MoleculeViewer(X11Window):
 
         self.renderer = ORTEP_MoleculeRenderer()
 
+        # Initialize mouse state variables
+        self.active_button = None         # 'left', 'middle', 'right', or 'shift-left'
+        self.last_mouse_x = None
+        self.last_mouse_y = None
+        self.last_click_time = 0.0
 
     def redraw(self):
         self.canvas.clear()
-        # remove old bond/atom calls
-        # self.renderer._draw_bonds(...)
-        # self.renderer._draw_atoms(...)
-        # now we do:
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
         self.canvas.flush()
 
-#     def redraw(self):
-#         self.canvas.clear()
-#        #-----  # self.renderer.draw(self.canvas, self.ortep_mol, self.view_params)
-#        #-----  # Instead, try the advanced partial-occlusion approach:
-#        #-----  self.renderer.draw_segmented(self.canvas, self.ortep_mol, self.view_params)
-# 
-#         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
-#         self.canvas.flush()
-
     def handle_key(self, evt):
-        # same as in the old code
+        # same as in the old code for key events
         keysym = self.display.keycode_to_keysym(evt.detail, evt.state)
         keychar = XK.keysym_to_string(keysym)
 
@@ -108,4 +103,81 @@ class MoleculeViewer(X11Window):
         else:
             print(f"Ignored key: {keychar}")
 
+        self.redraw()
+
+    def handle_button_press(self, evt):
+        # evt.detail: 1=left, 2=middle, 3=right, 4=scroll up, 5=scroll down
+
+        if evt.detail in (4, 5):
+            # Handle zoom events
+            if evt.detail == 4:
+                self.view_params.scale *= 1.1
+            elif evt.detail == 5:
+                self.view_params.scale /= 1.1
+            self.redraw()
+            return
+
+        self.last_mouse_x = evt.event_x
+        self.last_mouse_y = evt.event_y
+
+        # Check for Shift modifier (using evt.state & X.ShiftMask)
+        shift_pressed = bool(evt.state & X.ShiftMask)
+
+        if evt.detail == 1:
+            # For left-click, check for double-click reset if Shift is pressed.
+            if shift_pressed:
+                current_time = time.time()
+                if (current_time - self.last_click_time) < 0.3:
+                    self.reset_view()
+                    return
+                else:
+                    self.last_click_time = current_time
+                    self.active_button = 'shift-left'
+            else:
+                self.active_button = 'left'
+        elif evt.detail == 2:
+            self.active_button = 'middle'
+        elif evt.detail == 3:
+            self.active_button = 'right'
+
+    def handle_motion(self, evt):
+        if self.active_button is None:
+            return
+
+        dx = evt.event_x - self.last_mouse_x
+        dy = evt.event_y - self.last_mouse_y
+        self.last_mouse_x = evt.event_x
+        self.last_mouse_y = evt.event_y
+
+        # Define rotation factors (in degrees per pixel)
+        k_x = 0.5  # vertical movement -> rotation around X
+        k_y = 0.5  # horizontal movement -> rotation around Y
+        k_z = 0.5  # horizontal movement -> rotation around Z
+
+        if self.active_button == 'left':
+            # Left-drag: rotate around X (vertical) and Y (horizontal)
+            self.view_params.rx += k_x * dy
+            self.view_params.ry += k_y * dx
+        elif self.active_button in ('middle', 'shift-left'):
+            # Middle or Shift+left drag: rotate around Z using horizontal movement
+            self.view_params.rz += k_z * dx
+        elif self.active_button == 'right':
+            # Right-drag: pan the view (translate)
+            self.view_params.x_offset += dx
+            self.view_params.y_offset += dy
+
+        self.redraw()
+
+    def handle_button_release(self, evt):
+        # Reset the active button when the button is released.
+        self.active_button = None
+
+    def reset_view(self):
+        # Reset view parameters to their defaults.
+        self.view_params.rx = 0.0
+        self.view_params.ry = 0.0
+        self.view_params.rz = 0.0
+        self.view_params.scale = 100.0
+        self.view_params.x_offset = self.canvas.width // 2
+        self.view_params.y_offset = self.canvas.height // 2
         self.redraw()

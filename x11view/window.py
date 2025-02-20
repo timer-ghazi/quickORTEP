@@ -27,8 +27,11 @@ class X11Window:
         self.running = True
 
         event_mask = (X.ExposureMask |
-                      X.KeyPressMask |
-                      X.StructureNotifyMask)
+              X.KeyPressMask |
+              X.StructureNotifyMask |
+              X.ButtonPressMask |
+              X.ButtonReleaseMask |
+              X.PointerMotionMask)
 
         # Create the actual X11 Window
         self.window = self.screen.root.create_window(
@@ -71,6 +74,12 @@ class X11Window:
                 self.redraw()
         elif evt.type == X.KeyPress:
             self.handle_key(evt)
+        elif evt.type == X.ButtonPress:
+            self.handle_button_press(evt)
+        elif evt.type == X.ButtonRelease:
+            self.handle_button_release(evt)
+        elif evt.type == X.MotionNotify:
+            self.handle_motion(evt)
         elif evt.type == X.ConfigureNotify:
             # Window was resized
             new_width = evt.width
