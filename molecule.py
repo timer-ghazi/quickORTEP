@@ -19,7 +19,7 @@ import math
 import numpy as np
 from dataclasses import dataclass
 import re
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Dict
 
 import pprint 
 
@@ -56,7 +56,6 @@ class Molecule:
         self.atoms = []               # type: List[Atom]
         self.bond_matrix = None       # type: np.ndarray
         self.fragments = {}           # type: Dict[int, List[int]]
-
 
     @classmethod
     def from_atoms(cls, atoms: List[Tuple[str, float, float, float]], title: str = "") -> "Molecule":
@@ -192,7 +191,6 @@ class Molecule:
         mol.read_xyz_data(data=data, file_name=file_name, units=units)
         return mol
 
-
     def detect_bonds(self, tolerance: float = 0.3):
         """
         Fills self.bond_matrix by comparing interatomic distances
@@ -263,10 +261,10 @@ class Molecule:
         If degrees=False, return radians.
 
         $$
-        \\theta = \\cos^{-1} \\Bigl(
-            \\frac{(\\mathbf{r}_i - \\mathbf{r}_j) \\cdot (\\mathbf{r}_k - \\mathbf{r}_j)}
-                 {\\|\\mathbf{r}_i - \\mathbf{r}_j\\| \\, \\|\\mathbf{r}_k - \\mathbf{r}_j\\|}
-        \\Bigr)
+        \theta = \cos^{-1} \Bigl(
+            \frac{(\mathbf{r}_i - \mathbf{r}_j) \cdot (\mathbf{r}_k - \mathbf{r}_j)}
+                 {\|\mathbf{r}_i - \mathbf{r}_j\| \, \|\mathbf{r}_k - \mathbf{r}_j\|}
+        \Bigr)
         $$
         """
         r_i = np.array([self.atoms[i].x, self.atoms[i].y, self.atoms[i].z])
@@ -326,7 +324,6 @@ class Molecule:
 
         return np.degrees(angle_radians) if degrees else angle_radians
 
-
     def to_standard_orientation(self, use_atomic_numbers: bool = True) -> None:
         """
         Converts the molecule's atomic coordinates to a standard orientation.
@@ -337,15 +334,15 @@ class Molecule:
            Compute the center of nuclear charge (or mass) and translate all coordinates so that
            the center is at the origin. That is,
            $$
-           \\mathbf{T} = \\frac{\\sum_i w_i \\mathbf{r}_i}{\\sum_i w_i}, \\quad
-           \\mathbf{r}_i' = \\mathbf{r}_i - \\mathbf{T},
+           \mathbf{T} = \frac{\sum_i w_i \mathbf{r}_i}{\sum_i w_i}, \quad
+           \mathbf{r}_i' = \mathbf{r}_i - \mathbf{T},
            $$
            where $w_i$ is either the atomic number or atomic mass.
         
         2. **Inertia Tensor Construction:**  
            Build the inertia tensor using the weighted centered coordinates:
            $$
-           I = \\sum_i w_i \\Bigl(\\|\\mathbf{r}_i'\\|^2\\, \\mathbf{I}_{3\\times3} - \\mathbf{r}_i' \\mathbf{r}_i'^{T}\\Bigr).
+           I = \sum_i w_i \Bigl(\|\mathbf{r}_i'\|^2\, \mathbf{I}_{3\times3} - \mathbf{r}_i' \mathbf{r}_i'^{T}\Bigr).
            $$
         
         3. **Diagonalization:**  
@@ -357,32 +354,74 @@ class Molecule:
            - New $y$-axis is the eigenvector corresponding to the intermediate eigenvalue,
            - New $z$-axis is the eigenvector corresponding to the smallest eigenvalue.
            
-           That is, if $\lambda_0 \le \\lambda_1 \\le \\lambda_2$, then set
+           That is, if $\lambda_0 \le \lambda_1 \le \lambda_2$, then set
            $$
-           R = \\begin{pmatrix} \\mathbf{v}_{x} & \\mathbf{v}_{y} & \\mathbf{v}_{z} \\end{pmatrix}
-           = \\begin{pmatrix} \\mathbf{v}_{\\lambda_2} & \\mathbf{v}_{\\lambda_1} & \\mathbf{v}_{\\lambda_0} \\end{pmatrix}.
+           R = \begin{pmatrix} \mathbf{v}_{x} & \mathbf{v}_{y} & \mathbf{v}_{z} \end{pmatrix}
+           = \begin{pmatrix} \mathbf{v}_{\lambda_2} & \mathbf{v}_{\lambda_1} & \mathbf{v}_{\lambda_0} \end{pmatrix}.
            $$
-           Finally, ensure that $\\det(R) = +1$ (right-handed coordinate system).
+           Finally, ensure that $\det(R) = +1$ (right-handed coordinate system).
         
         5. **Coordinate Transformation:**  
            The final standard orientation coordinates are given by:
            $$
-           \\mathbf{r}_{\\text{std}} = (\\mathbf{r} - \\mathbf{T}) \\cdot R.
+           \mathbf{r}_{\text{std}} = (\mathbf{r} - \mathbf{T}) \cdot R.
            $$
            Update the molecule's atomic coordinates with these values.
         """
-
-        # Step 1: Extract coordinates and compute the reference center.
+        # Extract original coordinates.
         coords = np.array([[atom.x, atom.y, atom.z] for atom in self.atoms])
+        
+        # Compute weights based on atomic numbers or masses.
         if use_atomic_numbers:
             weights = np.array([Elements.atomic_number(atom.symbol) for atom in self.atoms])
         else:
             weights = np.array([Elements.mass(atom.symbol) for atom in self.atoms])
+        
+        # Step 1: Compute center and centered coordinates.
+        coords_centered, T = self._compute_center(coords, weights)
+        
+        # Step 2: Construct the inertia tensor.
+        I = self._compute_inertia_tensor(coords_centered, weights)
+        
+        # Step 3: Diagonalize the inertia tensor.
+        eigenvalues, eigenvectors = self._diagonalize_inertia_tensor(I)
+        
+        # Step 4: Build the rotation matrix from eigenvectors.
+        R = self._build_rotation_matrix(eigenvalues, eigenvectors)
+        
+        # Step 5: Rotate the centered coordinates.
+        coords_std = self._apply_transformation(coords_centered, R)
+        
+        # Update the atom coordinates.
+        self._update_atom_coordinates(coords_std)
+
+    def _compute_center(self, coords: np.ndarray, weights: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Computes the center of mass (or nuclear charge) and returns the centered coordinates.
+        
+        Parameters:
+            coords: Array of atomic coordinates.
+            weights: Array of weights (atomic numbers or masses) for each atom.
+        
+        Returns:
+            A tuple (coords_centered, T) where T is the computed center.
+        """
         total_weight = np.sum(weights)
         T = np.sum(weights[:, None] * coords, axis=0) / total_weight
         coords_centered = coords - T
+        return coords_centered, T
 
-        # Step 2: Construct the inertia tensor using centered coordinates.
+    def _compute_inertia_tensor(self, coords_centered: np.ndarray, weights: np.ndarray) -> np.ndarray:
+        """
+        Constructs the inertia tensor from centered coordinates and weights.
+        
+        Parameters:
+            coords_centered: Centered atomic coordinates.
+            weights: Array of weights for each atom.
+        
+        Returns:
+            A 3x3 inertia tensor.
+        """
         I = np.zeros((3, 3))
         for i, (x, y, z) in enumerate(coords_centered):
             w = weights[i]
@@ -392,38 +431,76 @@ class Molecule:
             I[0, 1] -= w * x * y
             I[0, 2] -= w * x * z
             I[1, 2] -= w * y * z
-        # Enforce symmetry:
+        # Enforce symmetry
         I[1, 0] = I[0, 1]
         I[2, 0] = I[0, 2]
         I[2, 1] = I[1, 2]
+        return I
 
-        # Step 3: Diagonalize the inertia tensor.
-        # np.linalg.eigh returns eigenvalues in ascending order.
+    def _diagonalize_inertia_tensor(self, I: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Diagonalizes the inertia tensor.
+        
+        Parameters:
+            I: The inertia tensor.
+        
+        Returns:
+            A tuple (eigenvalues, eigenvectors) from the diagonalization.
+            Eigenvalues are returned in ascending order.
+        """
         eigenvalues, eigenvectors = np.linalg.eigh(I)
+        return eigenvalues, eigenvectors
 
-        # Step 4: Reorder eigenvectors to define the new axes.
-        # Convention: new_x = eigenvector with largest eigenvalue,
-        #             new_y = eigenvector with intermediate eigenvalue,
-        #             new_z = eigenvector with smallest eigenvalue.
-        idx = np.argsort(eigenvalues)  # idx[0]: smallest, idx[2]: largest.
+    def _build_rotation_matrix(self, eigenvalues: np.ndarray, eigenvectors: np.ndarray) -> np.ndarray:
+        """
+        Builds the rotation matrix based on eigenvalues and eigenvectors.
+        Adopts the convention that the new x-axis corresponds to the largest eigenvalue,
+        y-axis to the intermediate, and z-axis to the smallest eigenvalue.
+        Ensures a right-handed coordinate system.
+        
+        Parameters:
+            eigenvalues: Array of eigenvalues.
+            eigenvectors: Corresponding eigenvectors.
+        
+        Returns:
+            A 3x3 rotation matrix.
+        """
+        # Sort indices: idx[0] smallest, idx[2] largest.
+        idx = np.argsort(eigenvalues)
         v_small = eigenvectors[:, idx[0]]
         v_mid   = eigenvectors[:, idx[1]]
         v_large = eigenvectors[:, idx[2]]
-        # Build the rotation matrix (columns are new axes: x, y, z).
+        # Build rotation matrix (columns are new x, y, z axes)
         R = np.column_stack((v_large, v_mid, v_small))
-
-        # Step 5: Ensure the rotation matrix is right-handed.
+        # Ensure right-handed coordinate system.
         if np.linalg.det(R) < 0:
-            R[:, 0] *= -1  # Flip the new x-axis if needed.
+            R[:, 0] *= -1
+        return R
 
-        # Step 6: Rotate the centered coordinates.
-        coords_std = np.dot(coords_centered, R)
+    def _apply_transformation(self, coords: np.ndarray, R: np.ndarray) -> np.ndarray:
+        """
+        Applies the rotation (or transformation) matrix to the coordinates.
+        
+        Parameters:
+            coords: Array of coordinates (centered).
+            R: Rotation matrix.
+        
+        Returns:
+            Transformed coordinates.
+        """
+        return np.dot(coords, R)
 
-        # Update the atom coordinates,
-        # swapping x and z axes to match Gaussian
+    def _update_atom_coordinates(self, coords_std: np.ndarray) -> None:
+        """
+        Updates the molecule's atoms with the new coordinates.
+        Note: Swaps axes to match Gaussian's standard orientation convention.
+        
+        Parameters:
+            coords_std: The standard orientation coordinates.
+        """
         for i, atom in enumerate(self.atoms):
+            # Swap axes: assign atom.z, atom.y, atom.x from coords_std[i]
             atom.z, atom.y, atom.x = coords_std[i]
-
 
     def summary(self) -> str:
         """
@@ -440,7 +517,6 @@ class Molecule:
         else:
             lines.append("Fragments not yet determined.")
         return "\n".join(lines)
-
 
     def to_xyz(self) -> str:
         """
@@ -465,7 +541,6 @@ class Molecule:
         for atom in self.atoms:
             lines.append(f"{atom.symbol:<5}{atom.x:17.12f}{atom.y:17.12f}{atom.z:17.12f}")
         return "\n".join(lines)
-
 
 
 if __name__ == "__main__":
