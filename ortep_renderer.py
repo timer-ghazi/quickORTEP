@@ -3,7 +3,7 @@ from geometry_utils import rotate_point, project_point
 from elements_table import Elements
 from zobjects import ZAtom, ZSegment  # Our new drawable objects
 
-from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL, BOND_THICKNESS_ANG
+from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL, BOND_THICKNESS_ANG, BOND_SEGMENT_LENGTH_ANG
 
 def hex_to_rgb(hex_color):
     """
@@ -39,7 +39,7 @@ class ORTEP_MoleculeRenderer:
         
         For each bond:
         - Trim its ends so the bond doesn't intrude into the atomic sphere.
-        - Subdivide the remaining line into several segments.
+        - Subdivide the remaining line into segments based on a fixed segment length.
         - Unify endpoints across segments to avoid gaps.
         """
         render_list = []
@@ -53,7 +53,7 @@ class ORTEP_MoleculeRenderer:
             # Project to 2D screen coordinates
             x2d, y2d = project_point(x_rot, y_rot, z_rot, vp)
 
-            # Get the covalent radius (in Angstroms)
+            # Get the covalent radius (in Ångströms)
             try:
                 r_covalent = Elements.covalent_radius(atom.symbol, order="single",
                                                        source="cordero", unit="Ang")
@@ -110,8 +110,12 @@ class ORTEP_MoleculeRenderer:
             t_start = r_i / dist
             t_end = 1.0 - (r_j / dist)
 
-            # Subdivide the visible portion into N segments
-            N = 6
+            # Calculate visible bond length in 3D (in Å)
+            visible_length = (t_end - t_start) * dist
+
+            # Determine the number of segments, ensuring at least one segment.
+            # Using a fixed segment length from config:
+            N = max(1, int(math.ceil(visible_length / BOND_SEGMENT_LENGTH_ANG)))
             dt = (t_end - t_start) / N
             if dt <= 0:
                 continue
@@ -158,6 +162,7 @@ class ORTEP_MoleculeRenderer:
                 render_list.append(seg_obj)
 
         return render_list
+
 
     def _get_atom_color(self, atom):
         """

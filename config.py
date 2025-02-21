@@ -14,3 +14,6 @@ ARC_FLATTEN = 0.4
 
 # Bond thickness in ang
 BOND_THICKNESS_ANG = 0.18
+
+# Bond segment length (in Ångströms) used for splitting bonds.
+BOND_SEGMENT_LENGTH_ANG = 0.15
