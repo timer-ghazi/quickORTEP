@@ -1,3 +1,5 @@
+# ortep_renderer.py
+
 import math
 from geometry_utils import rotate_point, project_point
 from elements_table import Elements
@@ -7,8 +9,7 @@ from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL, BOND_THICKNESS_ANG, BON
 
 def hex_to_rgb(hex_color):
     """
-    Helper to convert a #RRGGBB string into an (R,G,B) tuple.
-    Fallback to (200,200,200) if invalid.
+    Convert a hex color string (e.g. "#FF0000") to an (R,G,B) tuple.
     """
     if not (hex_color.startswith('#') and len(hex_color) == 7):
         return (200, 200, 200)
@@ -20,8 +21,7 @@ def hex_to_rgb(hex_color):
 class ORTEP_MoleculeRenderer:
     """
     Responsible for drawing atoms and bonds of an ORTEP_Molecule using
-    a painter's algorithm (z-sorting). The bond segmentation is now handled
-    by the bond objects themselves.
+    a painter's algorithm (z-sorting). Bond segmentation is delegated to the bond objects.
     """
 
     def build_render_list(self, ortep_molecule, vp):
@@ -59,9 +59,10 @@ class ORTEP_MoleculeRenderer:
                 color=self._get_atom_color(atom),
                 z_value=z_rot
             )
-            render_list.append(z_atom)
+            # Attach underlying atom data.
+            z_atom.atom = atom
 
-            # Save rotated position and effective radius for bond clipping.
+            render_list.append(z_atom)
             rotated_info.append((x_rot, y_rot, z_rot, r_eff))
 
         # --- 2) Process bonds ---
@@ -96,12 +97,8 @@ class ORTEP_MoleculeRenderer:
         Draw the molecule by building a render list, sorting by z-value,
         and drawing each object in order.
         """
-        # 1) Build the render list (atoms + bond segments).
         z_list = self.build_render_list(ortep_molecule, view_params)
-
-        # 2) Sort objects by z-value (farthest first).
+        # Sort objects so that those with higher z_value (closer) are drawn last.
         z_list.sort(key=lambda obj: obj.z_value, reverse=True)
-
-        # 3) Draw each object.
         for obj in z_list:
             obj.draw(canvas)

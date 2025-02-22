@@ -1,4 +1,10 @@
-# ortep_viewer.py
+#!/usr/bin/env python3
+"""
+ortep_viewer.py
+
+The viewer class that manages an ORTEP_Molecule, its renderer, and handles user events.
+Now updated to include basic hit-testing, object selection, and reporting enhanced info.
+"""
 
 import sys
 import time
@@ -25,16 +31,16 @@ class ViewParams:
 
 class MoleculeViewer(X11Window):
     """
-    The 'controller/view' class that manages an ORTEP_Molecule, an ORTEP_MoleculeRenderer,
+    The controller/view class that manages an ORTEP_Molecule, its renderer,
     and handles user events (key presses, mouse events, etc.).
-    """
 
+    New for interactivity:
+    - A selection state is added.
+    - A hit test method is implemented.
+    - A text message is drawn in the X11 window reporting the current selection.
+    """
     def __init__(self, ortep_molecule, width=800, height=600,
                  ss_factor=1, tile_size=128):
-        """
-        :param ss_factor: integer supersampling factor (1 = no AA)
-        :param tile_size: tile size if using X11CanvasSS
-        """
         # Choose the canvas class
         if ss_factor <= 1:
             canvas_class = X11CanvasBasic
@@ -65,17 +71,23 @@ class MoleculeViewer(X11Window):
         self.last_mouse_y = None
         self.last_click_time = 0.0
 
+        # --- New for hit testing and selection ---
+        self.selected_object = None
+        self.info_message = "No object selected yet."
+        self.click_start_x = None
+        self.click_start_y = None
+
     def redraw(self):
         self.canvas.clear()
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
+        # Draw the info text message at the bottom left (adjust position as desired)
+        self.canvas.draw_text(10, self.canvas.height - 20,
+                              self.info_message, color=(0, 0, 0), font_size=14)
         self.canvas.flush()
 
     def fit_molecule_to_window(self):
-
-        # Collect rotated x,y coordinates of all atoms.
         xs, ys = [], []
         for atom in self.ortep_mol.atoms:
-            # Apply current rotation.
             x_rot, y_rot, _ = rotate_point(atom.x, atom.y, atom.z,
                                            self.view_params.rx,
                                            self.view_params.ry,
@@ -84,23 +96,20 @@ class MoleculeViewer(X11Window):
             ys.append(y_rot)
         
         if not xs or not ys:
-            return  # nothing to do if no atoms
-    
+            return
+        
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
         
-        # Define a margin (in pixels)
         margin = 20
         available_width = self.canvas.width - 2 * margin
         available_height = self.canvas.height - 2 * margin
         
-        # Avoid division by zero if extents are zero
         extent_x = max_x - min_x if max_x > min_x else 1.0
         extent_y = max_y - min_y if max_y > min_y else 1.0
         
         new_scale = min(available_width / extent_x, available_height / extent_y)
         
-        # Update scale and offsets
         self.view_params.scale = new_scale
         center_x = (min_x + max_x) / 2.0
         center_y = (min_y + max_y) / 2.0
@@ -109,8 +118,18 @@ class MoleculeViewer(X11Window):
         
         self.redraw()
 
+    def hit_test(self, x, y):
+        """
+        Build a list of drawable ZObjects and return the first one whose
+        'contains()' method reports a hit.
+        """
+        z_objects = self.renderer.build_render_list(self.ortep_mol, self.view_params)
+        for obj in sorted(z_objects, key=lambda o: o.z_value, reverse=True):
+            if hasattr(obj, 'contains') and obj.contains(x, y):
+                return obj
+        return None
+
     def handle_key(self, evt):
-        # same as in the old code for key events
         keysym = self.display.keycode_to_keysym(evt.detail, evt.state)
         keychar = XK.keysym_to_string(keysym)
 
@@ -150,10 +169,7 @@ class MoleculeViewer(X11Window):
         self.redraw()
 
     def handle_button_press(self, evt):
-        # evt.detail: 1=left, 2=middle, 3=right, 4=scroll up, 5=scroll down
-
         if evt.detail in (4, 5):
-            # Handle zoom events
             if evt.detail == 4:
                 self.view_params.scale *= 1.1
             elif evt.detail == 5:
@@ -163,12 +179,13 @@ class MoleculeViewer(X11Window):
 
         self.last_mouse_x = evt.event_x
         self.last_mouse_y = evt.event_y
+        if evt.detail == 1:
+            self.click_start_x = evt.event_x
+            self.click_start_y = evt.event_y
 
-        # Check for Shift modifier (using evt.state & X.ShiftMask)
         shift_pressed = bool(evt.state & X.ShiftMask)
 
         if evt.detail == 1:
-            # For left-click, check for double-click reset if Shift is pressed.
             if shift_pressed:
                 current_time = time.time()
                 if (current_time - self.last_click_time) < 0.3:
@@ -193,50 +210,69 @@ class MoleculeViewer(X11Window):
         self.last_mouse_x = evt.event_x
         self.last_mouse_y = evt.event_y
 
-        # Define rotation factors (in degrees per pixel)
-        k_x = 0.5  # vertical movement -> rotation around X
-        k_y = 0.5  # horizontal movement -> rotation around Y
-        k_z = 0.5  # horizontal movement -> rotation around Z
+        k_x = 0.5
+        k_y = 0.5
+        k_z = 0.5
 
         if self.active_button == 'left':
-            # Left-drag: rotate around X (vertical) and Y (horizontal)
             self.view_params.rx += k_x * dy
             self.view_params.ry += k_y * dx
         elif self.active_button in ('middle', 'shift-left'):
-            # Middle or Shift+left drag: rotate around Z using horizontal movement
             self.view_params.rz += k_z * dx
         elif self.active_button == 'right':
-            # Right-drag: pan the view (translate)
             self.view_params.x_offset += dx
             self.view_params.y_offset += dy
 
         self.redraw()
 
     def handle_button_release(self, evt):
-        # Reset the active button when the button is released.
+        if self.active_button == 'left':
+            dx = evt.event_x - self.click_start_x
+            dy = evt.event_y - self.click_start_y
+            # Use a threshold (squared distance < 100 corresponds to ~10 pixels)
+            if dx*dx + dy*dy < 100:
+                clicked_obj = self.hit_test(evt.event_x, evt.event_y)
+                self.selected_object = clicked_obj
+                if clicked_obj is None:
+                    self.info_message = "No object selected"
+                else:
+                    # For atoms: if an underlying atom is attached, show its info.
+                    if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
+                        a = clicked_obj.atom
+                        if hasattr(a, 'index'):
+                            self.info_message = f"Selected Atom {a.index}: {a.symbol}"
+                        else:
+                            self.info_message = f"Selected Atom: {a.symbol}"
+                    # For bonds: if an underlying bond is attached, show connected atoms and bond length.
+                    elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
+                        b = clicked_obj.bond
+                        # Check for atom index; if missing, just show symbol.
+                        if hasattr(b.atom1, 'index') and hasattr(b.atom2, 'index'):
+                            self.info_message = (f"Selected Bond: {b.atom1.index} ({b.atom1.symbol}) - "
+                                                 f"{b.atom2.index} ({b.atom2.symbol}); Length: {b.length:.2f} Å")
+                        else:
+                            self.info_message = (f"Selected Bond: {b.atom1.symbol} - "
+                                                 f"{b.atom2.symbol}; Length: {b.length:.2f} Å")
+                    else:
+                        # Fallback if no extra info is attached.
+                        if hasattr(clicked_obj, 'x2d'):
+                            self.info_message = f"Selected Atom at ({clicked_obj.x2d}, {clicked_obj.y2d})"
+                        else:
+                            self.info_message = "Selected Bond segment"
+                print(self.info_message)
+                self.redraw()
         self.active_button = None
 
     def dump_svg(self):
-        # Create an SVG canvas
         svg_canvas = SVGCanvas(width=self.canvas.width, height=self.canvas.height)
-    
-        # Temporarily tell the renderer we want float coords
         self.view_params.as_float = True
-    
-        # Render to the SVG canvas
         self.renderer.draw_molecule(svg_canvas, self.ortep_mol, self.view_params)
-    
-        # Turn it off again so normal X11 drawing stays integer-based
         self.view_params.as_float = False
-    
-        # Write the SVG content
         filename = "quickORTEP_export.svg"
         svg_canvas.flush(filename)
-        # print(f"SVG export saved to {filename}")
-
+        print(f"SVG export saved to {filename}")
 
     def reset_view(self):
-        # Reset view parameters to their defaults.
         self.view_params.rx = 0.0
         self.view_params.ry = 0.0
         self.view_params.rz = 0.0
