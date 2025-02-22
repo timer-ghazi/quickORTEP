@@ -130,3 +130,76 @@ class CovalentBond(Bond):
             )
             segments.append(seg_obj)
         return segments
+
+class NCIBond(Bond):
+    """
+    Represents a non-covalent interaction (NCI) bond.
+
+    This bond type is rendered as a thin, dashed grey line.
+    The dashed effect is achieved by skipping every other segment.
+    """
+
+    def get_segments(self, rotated_coords, view_params):
+        """
+        Compute the drawable segments for an NCI bond.
+
+        The bond is trimmed using the effective radii and then split into
+        segments. Every other segment is skipped to produce a dashed effect.
+
+        :param rotated_coords: Tuple containing two tuples:
+            ((x1, y1, z1, r_eff1), (x2, y2, z2, r_eff2)).
+        :param view_params: View parameters (including scale) used for projection.
+        :return: List of ZSegment objects.
+        """
+        (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
+
+        # Compute the vector between the atoms and its 3D distance.
+        vx = x2 - x1
+        vy = y2 - y1
+        vz = z2 - z1
+        dist = math.sqrt(vx*vx + vy*vy + vz*vz)
+        if dist < 1e-6 or (r_i + r_j >= dist):
+            # No visible bond if atoms are too close.
+            return []
+
+        # Compute the trimmed region using effective radii:
+        # $$ t_{start} = \\frac{r_i}{\\text{dist}}, \\quad t_{end} = 1 - \\frac{r_j}{\\text{dist}} $$
+        t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
+        visible_length = (t_end - t_start) * dist
+
+        # Determine the number of segments, ensuring at least one.
+        N = max(1, int(math.ceil(visible_length / BOND_SEGMENT_LENGTH_ANG)))
+        dt = (t_end - t_start) / N
+
+        segments = []
+        for seg_index in range(N):
+            # Skip every other segment to create a dashed effect.
+            if seg_index % 2 == 1:
+                continue
+
+            t1 = t_start + seg_index * dt
+            t2 = t_start + (seg_index + 1) * dt
+
+            # Compute 3D coordinates for the endpoints of the segment.
+            p1 = (x1 + vx * t1, y1 + vy * t1, z1 + vz * t1)
+            p2 = (x1 + vx * t2, y1 + vy * t2, z1 + vz * t2)
+            
+            # Project the 3D points to 2D screen coordinates.
+            X1, Y1 = project_point(*p1, view_params)
+            X2, Y2 = project_point(*p2, view_params)
+            
+            # Use the midpoint's z for painter's algorithm sorting.
+            zm = 0.5 * (p1[2] + p2[2])
+            
+            # Use a thinner bond: half the standard thickness.
+            bond_thickness_px = max(1, int((BOND_THICKNESS_ANG * 0.5) * view_params.scale))
+            
+            # Create a segment object with grey color.
+            seg_obj = ZSegment(
+                x1=X1, y1=Y1, x2=X2, y2=Y2,
+                z_value=zm,
+                thickness=bond_thickness_px,
+                color=(128, 128, 128)
+            )
+            segments.append(seg_obj)
+        return segments

@@ -12,7 +12,7 @@ import sys
 from molecule_nci import MoleculeWithNCIs
 
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
-from bonds import CovalentBond  # New: using our refactored bond class
+from bonds import CovalentBond, NCIBond
 from ortep_viewer import MoleculeViewer
 
 def main():
@@ -29,8 +29,9 @@ def main():
     # 1) Load the molecule with NCI
     mol_nci = MoleculeWithNCIs.from_xyz_data(file_name=xyz_file)
     mol_nci.to_standard_orientation()
-    # 2) Detect covalent bonds
+    # 2) Detect covalent bonds and NCIs
     mol_nci.detect_bonds(tolerance=0.3)
+    mol_nci.detect_all_ncis(run_steric_clashes=False)
     mol_nci.find_fragments()
 
     # 3) Build the new ORTEP_Molecule
@@ -51,6 +52,11 @@ def main():
                     # Create a covalent bond using the new refactored class.
                     b = CovalentBond(ortep_mol.atoms[i], ortep_mol.atoms[j])
                     ortep_mol.add_bond(b)
+
+    # Add NCIs
+    for (i, j), interactions in mol_nci.ncis.items():
+        nci_bond = NCIBond(ortep_mol.atoms[i], ortep_mol.atoms[j])
+        ortep_mol.add_bond(nci_bond)
 
     # 4) Launch the viewer
     viewer = MoleculeViewer(ortep_mol, width=800, height=600,
