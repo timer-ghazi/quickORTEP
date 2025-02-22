@@ -81,11 +81,17 @@ class X11Window:
         elif evt.type == X.MotionNotify:
             self.handle_motion(evt)
         elif evt.type == X.ConfigureNotify:
-            # Window was resized
             new_width = evt.width
             new_height = evt.height
             self.canvas.create_or_resize(new_width, new_height)
+            
+            # Update the view offsets if they exist (i.e., for MoleculeViewer)
+            if hasattr(self, 'view_params'):
+                self.view_params.x_offset = new_width // 2
+                self.view_params.y_offset = new_height // 2
+            
             self.redraw()
+
         elif evt.type == X.DestroyNotify:
             # Typically triggered if user closes the window from window manager
             print("Window closed by user.")

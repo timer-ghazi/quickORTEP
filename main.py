@@ -61,7 +61,10 @@ def main():
     # 4) Launch the viewer
     viewer = MoleculeViewer(ortep_mol, width=800, height=600,
                             ss_factor=ss_factor, tile_size=tile_size)
+    viewer.fit_molecule_to_window()  # Adjust zoom and centering so the molecule fits
+
     viewer.run()
 
 if __name__=="__main__":
     main()
+

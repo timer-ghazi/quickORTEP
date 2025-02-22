@@ -7,6 +7,7 @@ from Xlib import XK, X
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
+from geometry_utils import rotate_point
 
 class ViewParams:
     """
@@ -68,6 +69,45 @@ class MoleculeViewer(X11Window):
         self.canvas.clear()
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
         self.canvas.flush()
+
+    def fit_molecule_to_window(self):
+
+        # Collect rotated x,y coordinates of all atoms.
+        xs, ys = [], []
+        for atom in self.ortep_mol.atoms:
+            # Apply current rotation.
+            x_rot, y_rot, _ = rotate_point(atom.x, atom.y, atom.z,
+                                           self.view_params.rx,
+                                           self.view_params.ry,
+                                           self.view_params.rz)
+            xs.append(x_rot)
+            ys.append(y_rot)
+        
+        if not xs or not ys:
+            return  # nothing to do if no atoms
+    
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        
+        # Define a margin (in pixels)
+        margin = 20
+        available_width = self.canvas.width - 2 * margin
+        available_height = self.canvas.height - 2 * margin
+        
+        # Avoid division by zero if extents are zero
+        extent_x = max_x - min_x if max_x > min_x else 1.0
+        extent_y = max_y - min_y if max_y > min_y else 1.0
+        
+        new_scale = min(available_width / extent_x, available_height / extent_y)
+        
+        # Update scale and offsets
+        self.view_params.scale = new_scale
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        self.view_params.x_offset = self.canvas.width / 2 - center_x * new_scale
+        self.view_params.y_offset = self.canvas.height / 2 - center_y * new_scale
+        
+        self.redraw()
 
     def handle_key(self, evt):
         # same as in the old code for key events
