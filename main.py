@@ -11,7 +11,8 @@ This replicates the old ortep-view-v2.py behavior using a refactored architectur
 import sys
 from molecule_nci import MoleculeWithNCIs
 
-from ortep_molecule import ORTEP_Molecule, ORTEP_Atom, ORTEP_Bond
+from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
+from bonds import CovalentBond  # New: using our refactored bond class
 from ortep_viewer import MoleculeViewer
 
 def main():
@@ -20,7 +21,6 @@ def main():
         sys.exit(1)
 
     xyz_file = sys.argv[1]
-
     # default to no anti-aliasing => factor=1
     ss_factor = int(sys.argv[2]) if len(sys.argv) > 2 else 1
     # default tile_size = 128
@@ -41,15 +41,15 @@ def main():
         a = ORTEP_Atom(atom.symbol, atom.x, atom.y, atom.z)
         ortep_mol.add_atom(a)
 
-    # Convert adjacency matrix to ORTEP_Bonds
+    # Convert adjacency matrix to bonds using the new CovalentBond class
     n_atoms = len(mol_nci.atoms)
     bondmat = getattr(mol_nci, "bond_matrix", None)
     if bondmat is not None:
         for i in range(n_atoms):
             for j in range(i+1, n_atoms):
                 if bondmat[i, j] == 1:
-                    b = ORTEP_Bond(ortep_mol.atoms[i], ortep_mol.atoms[j],
-                                   bond_type="covalent")
+                    # Create a covalent bond using the new refactored class.
+                    b = CovalentBond(ortep_mol.atoms[i], ortep_mol.atoms[j])
                     ortep_mol.add_bond(b)
 
     # 4) Launch the viewer
