@@ -8,8 +8,11 @@ No supersampling or external libraries are required.
 """
 
 from Xlib import X
+from Xlib import error as xerror
+
 from .base import X11CanvasBase
 from .common import X11CanvasCommon
+
 
 
 class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
@@ -226,3 +229,84 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
             start_64,
             extent_64
         )
+
+
+    # -----------------------------------------------------------
+    # New: Rectangle border
+    # -----------------------------------------------------------
+    def draw_rect(self, x, y, width, height, color=(0, 0, 0), thickness=2):
+        gc = self.get_gc(
+            color=color,
+            thickness=thickness,
+            line_style=X.LineSolid,
+            fill_style=False
+        )
+        # Draws the rectangle border in one go
+        self.pixmap.rectangle(gc, x, y, width, height)
+
+    # -----------------------------------------------------------
+    # New: Filled rectangle
+    # -----------------------------------------------------------
+    def draw_filled_rect(self, x, y, width, height, color=(0, 0, 0)):
+        gc = self.get_gc(
+            color=color,
+            thickness=1,
+            line_style=X.LineSolid,
+            fill_style=True
+        )
+        # Fill a single rectangle
+        self.pixmap.poly_fill_rectangle(gc, [(x, y, width, height)])
+
+    # -----------------------------------------------------------
+    # New: Text drawing
+    # -----------------------------------------------------------
+
+    def draw_text(self, x, y, text, color=(0, 0, 0), font_size=12,
+                  font_candidates=None):
+        """
+        Draw text so that (x, y) is the text's baseline in X11.
+        If font_candidates is provided, it should be a list of font strings
+        (core X11 font names). We try each in order until one works.
+        If none work, we use a hardcoded fallback.
+        """
+        gc = self.get_gc(
+            color=color,
+            thickness=1,
+            line_style=X.LineSolid,
+            fill_style=False
+        )
+    
+        fallback_font_str = "-misc-fixed-medium-r-normal--13-120-75-75-c-70-iso8859-1"
+        if not font_candidates:
+            font_candidates = [fallback_font_str]
+    
+        chosen_font_str = None
+        chosen_font_obj = None
+    
+        for font_str in font_candidates:
+            try:
+                font_obj = self.display.open_font(font_str)
+                chosen_font_str = font_str
+                chosen_font_obj = font_obj
+                break
+            except (xerror.BadName, xerror.BadFont):
+                # Could not open this font name
+                pass
+    
+        if chosen_font_obj is None:
+            # Attempt the fallback
+            try:
+                chosen_font_obj = self.display.open_font(fallback_font_str)
+            except:
+                # If we fail here as well, nothing left to do; proceed with no font
+                pass
+    
+        if chosen_font_obj is not None:
+            # **Extract the numeric ID** from the resource object
+            gc.change(font=chosen_font_obj.id)
+    
+        # If we reach here with no loaded font, the text call might do nothing or fail.
+        # If you want to guard, you can check chosen_font_obj is not None.
+    
+        self.pixmap.draw_text(gc, x, y, text)
+    

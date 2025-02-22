@@ -202,3 +202,32 @@ class X11CanvasBase(ABC):
         :param color:          (R, G, B) tuple, each component 0..255
         """
         pass
+
+    @abstractmethod
+    def draw_text(self,
+                  x: int,
+                  y: int,
+                  text: str,
+                  color: tuple[int, int, int] = (0, 0, 0),
+                  font_size: int = 12) -> None:
+        pass
+    
+    @abstractmethod
+    def draw_rect(self,
+                  x: int,
+                  y: int,
+                  width: int,
+                  height: int,
+                  color: tuple[int, int, int] = (0, 0, 0),
+                  thickness: int = 2) -> None:
+        pass
+    
+    @abstractmethod
+    def draw_filled_rect(self,
+                         x: int,
+                         y: int,
+                         width: int,
+                         height: int,
+                         color: tuple[int, int, int] = (0, 0, 0)
+                         ) -> None:
+        pass

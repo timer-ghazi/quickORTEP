@@ -113,39 +113,80 @@ class X11Window:
         else:
             print(f"Key pressed: {keychar}")
 
-    def redraw(self):
-        """
-        Called whenever we need to redraw the scene
-        (initial window show, expose event, or after resize).
-        Here we do a small demonstration of drawing a few shapes.
-        """
-        self.canvas.clear()
 
+    def redraw(self):
+        self.canvas.clear()
         w = self.canvas.width
         h = self.canvas.height
-
-        # Draw something simple:
-        # 1) A filled circle in the center
+    
+        # Existing shapes...
         cx, cy = w // 2, h // 2
         r = min(w, h) // 6
         self.canvas.draw_filled_circle(cx, cy, r, color=(255, 0, 0))
-
-        # 2) A circle border around that, slightly bigger
         self.canvas.draw_circle_border(cx, cy, r + 10, color=(0, 0, 0), thickness=3)
-
-        # 3) A horizontal dashed line across the middle
         self.canvas.draw_dashed_line(0, cy, w, cy, thickness=2, color=(128, 128, 128))
-
-        # 4) A small arc in the top-left quarter
         self.canvas.draw_arc(w // 4, h // 4, 40, ry=20, angle_start_deg=0, angle_end_deg=180,
                              thickness=2, color=(0, 0, 255))
-
-        # 5) A filled arc in the bottom-right corner
         self.canvas.draw_filled_arc(w - 80, h - 80, 40, ry=30, angle_start_deg=180, angle_end_deg=270,
                                     color=(0, 255, 0))
-
+    
+        # Rectangles test
+        self.canvas.draw_rect(10, 10, 100, 50, color=(255, 0, 255), thickness=2)
+        self.canvas.draw_filled_rect(120, 10, 80, 50, color=(0, 255, 0))
+    
+        # ------------------------------
+        # Text demonstration
+        # ------------------------------
+    
+        # We'll define a few known "xterm" style fonts or built-in fonts
+        # in ascending order of size. Some may or may not exist on your system.
+        # You can check with `xlsfonts` in a terminal.
+        xterm_font_list = [
+            "6x13",
+            "7x14",
+            "8x13",
+            "9x15",
+            "10x20",
+            # Extended XLFD forms:
+            "-misc-fixed-medium-r-normal--15-140-75-75-c-90-iso8859-1",
+            "-misc-fixed-medium-r-normal--20-200-75-75-c-100-iso8859-1",
+        ]
+    
+        # We'll draw each in a new line, offset in y
+        y_offset = 120
+        for idx, fnt in enumerate(xterm_font_list):
+            # We'll also vary color a bit
+            color = (50 * idx % 256, 100 * idx % 256, 200 * idx % 256)
+    
+            # We'll pass the font as a single-element list for "font_candidates"
+            self.canvas.draw_text(
+                10, y_offset,
+                text=f"This line uses '{fnt}' (if available)",
+                color=color,
+                font_size=12,  # We'll just ignore font_size for now in X11 core
+                font_candidates=[fnt]
+            )
+            y_offset += 20
+    
+        # And let's show a line with multiple fallback fonts
+        multi_fonts = [
+            # Some random "rare" name that might not exist
+            "-schm-rarefont-medium-r-*-13-*-*-*-*-*-iso8859-1",
+            # Something else that might not exist
+            "-doesnotexist-*-14-*-*-*-*-*-iso8859-1",
+            # Then something that probably DOES exist
+            "9x15"
+        ]
+    
+        self.canvas.draw_text(
+            10, y_offset,
+            text="Trying multiple candidates, eventually falling back to '9x15'",
+            color=(128, 0, 0),
+            font_size=12,
+            font_candidates=multi_fonts
+        )
+    
         self.canvas.flush()
-
 
 def create_x11_window(width=800,
                       height=600,

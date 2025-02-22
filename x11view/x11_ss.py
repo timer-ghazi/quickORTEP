@@ -9,13 +9,27 @@ which is then downsampled and copied (in tiles) to an X11 Pixmap,
 and finally displayed in the window.
 """
 
+import io
 import sys
 import numpy as np
-from PIL import Image, ImageDraw
+import base64
+from PIL import Image, ImageDraw, ImageFont
 from Xlib import X
 
 from .base import X11CanvasBase
 from .common import X11CanvasCommon
+from .DejaVuSansMono import EMBEDDED_FONT_TTF
+
+def load_embedded_ttf_font(font_size: int):
+    # 1) Convert the base64 back to raw bytes
+    ttf_bytes = base64.b64decode(EMBEDDED_FONT_TTF)
+    
+    # 2) Wrap in a BytesIO for Pillow
+    font_stream = io.BytesIO(ttf_bytes)
+    
+    # 3) Load it with ImageFont.truetype
+    pil_font = ImageFont.truetype(font_stream, font_size)
+    return pil_font
 
 
 class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
@@ -330,3 +344,114 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
             fill=color
         )
 
+    
+    def draw_text(self,
+                  x: int,
+                  y: int,
+                  text: str,
+                  color: tuple[int, int, int] = (0, 0, 0),
+                  font_size: int = 12,
+                  font_candidates: list[str] = None) -> None:
+        """
+        Draw text so that (x, y) corresponds to the text baseline (similar to x11_basic).
+        We'll scale coordinates and font size by ss_factor for the high-res image.
+        
+        :param x:             X-position in window coords (baseline)
+        :param y:             Y-position in window coords (baseline)
+        :param text:          The string to draw
+        :param color:         (R, G, B) text color in [0..255]
+        :param font_size:     Approximate font size in "normal" pixels
+        :param font_candidates: A list of possible TTF paths to try, or None
+        """
+
+        # -- 1) Multiply coords by ss_factor to get high-res positions
+        ss_x = x * self.ss_factor
+        ss_y = y * self.ss_factor
+
+        # -- 2) Multiply font_size by ss_factor to maintain correct scaling
+        ss_font_size = int(font_size * self.ss_factor)
+
+        # -- 3) Determine which TTF file to load
+        # If the user gave font_candidates, we try them in order.
+        # Otherwise, or if all fail, we use "DejaVuSansMono.ttf".
+        ### if font_candidates is None or len(font_candidates) == 0:
+        ###     font_candidates = ["DejaVuSansMono.ttf"]
+
+        pil_font = load_embedded_ttf_font(ss_font_size)
+        #### for candidate in font_candidates:
+        ####     try:
+        ####         pil_font = ImageFont.truetype(candidate, ss_font_size)
+        ####         break  # Successfully loaded
+        ####     except OSError:
+        ####         # We'll keep trying the next candidate
+        ####         pass
+
+        #### if pil_font is None:
+        ####     # If we still have nothing, try the hard-coded DejaVuSansMono
+        ####     try:
+        ####         pil_font = ImageFont.truetype("DejaVuSansMono.ttf", ss_font_size)
+        ####     except OSError:
+        ####         # As an absolute fallback, use the default Pillow font
+        ####         pil_font = ImageFont.load_default()
+
+        # -- 4) Baseline adjustment:
+        # Pillow’s text() method interprets (x, y) as the top-left corner.
+        # So if we want (ss_x, ss_y) to be the baseline, we subtract the font's ascent.
+        ascent, descent = pil_font.getmetrics()
+        top_left_y = ss_y - ascent  # Move up so the baseline is at ss_y
+
+        # -- 5) Draw the text into the high-res image
+        self.ss_draw.text(
+            (ss_x, top_left_y),
+            text,
+            font=pil_font,
+            fill=color
+        )
+    
+    def draw_rect(self, 
+                  x: int, 
+                  y: int, 
+                  width: int, 
+                  height: int, 
+                  color: tuple[int, int, int] = (0, 0, 0),
+                  thickness: int = 2) -> None:
+        """
+        Draw an unfilled rectangle border.
+        (x, y) is the top-left corner, and thickness is border thickness in pixels.
+        """
+        ss_x = x * self.ss_factor
+        ss_y = y * self.ss_factor
+        ss_w = width * self.ss_factor
+        ss_h = height * self.ss_factor
+        ss_thick = thickness * self.ss_factor
+    
+        # In Pillow, rectangle(...) can set 'outline' for the border color,
+        # and 'width' for line thickness (in the supersampled space).
+        self.ss_draw.rectangle(
+            [(ss_x, ss_y), (ss_x + ss_w, ss_y + ss_h)],
+            outline=color,
+            fill=None,
+            width=ss_thick
+        )
+    
+    
+    def draw_filled_rect(self, 
+                         x: int, 
+                         y: int, 
+                         width: int, 
+                         height: int, 
+                         color: tuple[int, int, int] = (0, 0, 0)) -> None:
+        """
+        Draw a filled rectangle.
+        (x, y) is the top-left corner, filling the entire rectangle area with 'color'.
+        """
+        ss_x = x * self.ss_factor
+        ss_y = y * self.ss_factor
+        ss_w = width * self.ss_factor
+        ss_h = height * self.ss_factor
+    
+        self.ss_draw.rectangle(
+            [(ss_x, ss_y), (ss_x + ss_w, ss_y + ss_h)],
+            outline=None,
+            fill=color
+        )
