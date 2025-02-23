@@ -56,6 +56,28 @@ NCI_BOND = {
     "thickness_factor": 0.4,
 }
 
+TS_BOND = {
+    # Bond thickness in Ångströms.
+    "thickness": 0.18,
+
+    # Bond segment length in Ångströms used for splitting bonds.
+    "segment_length": 0.22,
+
+    # Color for covalent bonds.
+    "color": (128, 128, 148),
+}
+
+DISTANCE_BOND = {
+    # Bond thickness in Ångströms.
+    "thickness": 0.05,
+
+    # Bond segment length in Ångströms used for splitting bonds.
+    "segment_length": 0.22,
+
+    # Color for covalent bonds.
+    "color": (128, 128, 128),
+}
+
 # ================================
 # Highlighting Settings
 # ================================

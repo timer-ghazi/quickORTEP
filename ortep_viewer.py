@@ -3,8 +3,9 @@
 ortep_viewer.py
 
 The viewer class that manages an ORTEP_Molecule, its renderer, and handles user events.
-Now updated to support persistent selection for atoms and bonds by storing selection state
-in the underlying objects.
+Now updated to support:
+  - Uppercase 'B' to toggle (create/remove) a bond between two selected atoms.
+  - Lowercase 'b' to cycle through all bond types (without removal) when a bond is selected.
 """
 
 import sys
@@ -15,6 +16,13 @@ from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
 from geometry_utils import rotate_point
 from config import VIEWER_INTERACTION
+
+# Import the bond manager functions and cycle lists.
+from bond_manager import (
+    cycle_existing_bond,
+    cycle_atom_pair,
+    toggle_bond,
+)
 
 class ViewParams:
     """
@@ -34,8 +42,10 @@ class MoleculeViewer(X11Window):
     """
     The controller/view class that manages an ORTEP_Molecule, its renderer,
     and handles user events (key presses, mouse events, etc.).
-
-    Now supports persistent multi-selection for atoms and bonds.
+    
+    - Uppercase 'B' toggles a bond: if two atoms are selected, it will create a bond (if none exists)
+      or remove the bond (if one exists).
+    - Lowercase 'b' cycles through bond types (without removal) for a selected bond.
     """
     def __init__(self, ortep_molecule, width=800, height=600,
                  ss_factor=1, tile_size=128):
@@ -155,6 +165,42 @@ class MoleculeViewer(X11Window):
             self.view_params.scale /= VIEWER_INTERACTION["key_zoom_factor"]
         elif keychar == 's':
             self.dump_svg()
+        elif keychar == 'B':
+            # --- Bond Toggle Logic (Uppercase B) ---
+            if len(self.selected_atoms) == 2:
+                atom1, atom2 = self.selected_atoms
+                toggled = toggle_bond(atom1, atom2, self.ortep_mol)
+                if toggled:
+                    self.info_message = (f"Bond created: {toggled.atom1.symbol}{toggled.atom1.index}-"
+                                         f"{toggled.atom2.symbol}{toggled.atom2.index}")
+                    # Clear atom selection and select the new bond.
+                    for a in self.selected_atoms:
+                        a.selected = False
+                    self.selected_atoms = []
+                    toggled.selected = True
+                    self.selected_bonds = [toggled]
+                else:
+                    self.info_message = "Bond removed."
+                    self.selected_atoms = []  # keep cleared
+                    self.selected_bonds = []
+            else:
+                self.info_message = "Select exactly two atoms to toggle bond."
+        elif keychar == 'b':
+            # --- Bond Cycling Logic (Lowercase b) ---
+            if self.selected_bonds:
+                new_bonds = []
+                for bond in self.selected_bonds:
+                    new_bond = cycle_existing_bond(bond, self.ortep_mol)
+                    new_bonds.append(new_bond)
+                self.selected_bonds = new_bonds
+                if len(new_bonds) == 1:
+                    b = new_bonds[0]
+                    self.info_message = (f"Bond updated: {b.atom1.symbol}{b.atom1.index}-"
+                                         f"{b.atom2.symbol}{b.atom2.index}")
+                else:
+                    self.info_message = "Bond(s) updated."
+            else:
+                self.info_message = "Select a bond to cycle its type."
         else:
             print(f"Ignored key: {keychar}")
         self.redraw()
@@ -197,7 +243,6 @@ class MoleculeViewer(X11Window):
         dy = evt.event_y - self.last_mouse_y
         self.last_mouse_x = evt.event_x
         self.last_mouse_y = evt.event_y
-        # Use the configured mouse rotation sensitivity.
         sensitivity = VIEWER_INTERACTION["mouse_rotation_sensitivity"]
         if self.active_button == 'left':
             self.view_params.rx += sensitivity * dy
@@ -213,12 +258,10 @@ class MoleculeViewer(X11Window):
         if self.active_button in ('left', 'shift-left'):
             dx = evt.event_x - self.click_start_x
             dy = evt.event_y - self.click_start_y
-            if dx * dx + dy * dy < 100:  # treat as a click if movement is minimal
+            if dx * dx + dy * dy < 100:
                 clicked_obj = self.hit_test(evt.event_x, evt.event_y)
-                # Determine from active_button whether Shift was held.
                 shift_pressed = (self.active_button == 'shift-left')
                 if clicked_obj is None:
-                    # Clear all selections.
                     for atom in self.selected_atoms:
                         atom.selected = False
                     self.selected_atoms = []
@@ -227,9 +270,7 @@ class MoleculeViewer(X11Window):
                     self.selected_bonds = []
                     self.info_message = "No object selected"
                 else:
-                    # Process atom selection.
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
-                        # Clear bond selections.
                         for bond in self.selected_bonds:
                             bond.selected = False
                         self.selected_bonds = []
@@ -252,9 +293,7 @@ class MoleculeViewer(X11Window):
                         else:
                             sel_info = ", ".join(f"{a.symbol}{a.index}" for a in self.selected_atoms)
                             self.info_message = f"Selected atoms: {sel_info}"
-                    # Process bond selection.
                     elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
-                        # Clear atom selections.
                         for atom in self.selected_atoms:
                             atom.selected = False
                         self.selected_atoms = []
@@ -272,7 +311,7 @@ class MoleculeViewer(X11Window):
                             self.selected_bonds = [underlying_bond]
                             underlying_bond.selected = True
                         if len(self.selected_bonds) == 1:
-                            b = underlying_bond
+                            b = self.selected_bonds[0]
                             self.info_message = (f"Bond: {b.atom1.symbol}{b.atom1.index} - "
                                                  f"{b.atom2.symbol}{b.atom2.index} {b.length:.4f} Ang")
                         else:
@@ -281,7 +320,6 @@ class MoleculeViewer(X11Window):
                                 for b in self.selected_bonds)
                             self.info_message = f"Selected bonds: {sel_info}"
                     else:
-                        # Unrecognized object; clear selections.
                         for atom in self.selected_atoms:
                             atom.selected = False
                         self.selected_atoms = []
