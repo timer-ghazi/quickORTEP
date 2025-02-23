@@ -85,6 +85,7 @@ class MoleculeViewer(X11Window):
                               self.info_message, color=(0, 0, 0), font_size=14)
         self.canvas.flush()
 
+
     def fit_molecule_to_window(self):
         xs, ys = [], []
         for atom in self.ortep_mol.atoms:
@@ -94,28 +95,33 @@ class MoleculeViewer(X11Window):
                                            self.view_params.rz)
             xs.append(x_rot)
             ys.append(y_rot)
-        
+    
         if not xs or not ys:
             return
-        
+    
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
-        
+    
         margin = 20
         available_width = self.canvas.width - 2 * margin
         available_height = self.canvas.height - 2 * margin
-        
+    
         extent_x = max_x - min_x if max_x > min_x else 1.0
         extent_y = max_y - min_y if max_y > min_y else 1.0
-        
+    
+        # Compute the ideal scale that would make the molecule just fit within the margins:
         new_scale = min(available_width / extent_x, available_height / extent_y)
-        
-        self.view_params.scale = new_scale
+    
+        # Only update the scale if the molecule doesn't already fit (i.e. if new_scale is lower).
+        if new_scale < self.view_params.scale:
+            self.view_params.scale = new_scale
+    
+        # Recompute the center of the molecule and update offsets to center it.
         center_x = (min_x + max_x) / 2.0
         center_y = (min_y + max_y) / 2.0
-        self.view_params.x_offset = self.canvas.width / 2 - center_x * new_scale
-        self.view_params.y_offset = self.canvas.height / 2 - center_y * new_scale
-        
+        self.view_params.x_offset = self.canvas.width / 2 - center_x * self.view_params.scale
+        self.view_params.y_offset = self.canvas.height / 2 - center_y * self.view_params.scale
+    
         self.redraw()
 
     def hit_test(self, x, y):
@@ -239,20 +245,12 @@ class MoleculeViewer(X11Window):
                     # For atoms: if an underlying atom is attached, show its info.
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
                         a = clicked_obj.atom
-                        if hasattr(a, 'index'):
-                            self.info_message = f"Selected Atom: {a.symbol}{a.index}"
-                        else:
-                            self.info_message = f"Selected Atom: {a.symbol}"
+                        self.info_message = f"Atom: {a.symbol}{a.index}"
                     # For bonds: if an underlying bond is attached, show connected atoms and bond length.
                     elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
                         b = clicked_obj.bond
-                        # Check for atom index; if missing, just show symbol.
-                        if hasattr(b.atom1, 'index') and hasattr(b.atom2, 'index'):
-                            self.info_message = (f"Selected Bond: {b.atom1.symbol}{b.atom1.index} - "
-                                                 f"{b.atom2.symbol}{b.atom2.index} ; Length: {b.length:.4f} Å")
-                        else:
-                            self.info_message = (f"Selected Bond: {b.atom1.symbol} - "
-                                                 f"{b.atom2.symbol}; Length: {b.length:.4f} Å")
+                        self.info_message = (f"Bond: {b.atom1.symbol}{b.atom1.index} - "
+                                             f"{b.atom2.symbol}{b.atom2.index} {b.length:.4f} Ang")
                     else:
                         # Fallback if no extra info is attached.
                         if hasattr(clicked_obj, 'x2d'):
