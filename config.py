@@ -1,22 +1,88 @@
 # config.py
 
-# Default conversion factor: how many pixels represent 1 Ångström.
+# Global conversion factor:
 ANGSTROM_TO_PIXEL = 100
 
-# Atom sphere scaling factor: scales the atom’s covalent radius (in Å) to its visual size.
-# For example, a covalent radius of $r_{covalent}$ will be scaled as:
-#   r_scaled = r_covalent * SCALE_ATOM_SPHERE
-SCALE_ATOM_SPHERE = 0.4
+# ================================
+# Atom Visualization Settings
+# ================================
+ATOM_STYLE = {
+    # Scales an atom's covalent radius to its visual size.
+    "scale": 0.4,  # previously SCALE_ATOM_SPHERE
 
-# Arc flattening factor: used for drawing ORTEP arcs to simulate the sphere’s curvature.
-# It controls the ratio between the minor and major axes of the arc ellipses.
-ARC_FLATTEN = 0.4
+    # Color of the atom's border.
+    "border_color": (0, 0, 0),  # ATOM_BORDER_COLOR
 
-# Bond thickness in ang
-BOND_THICKNESS_ANG = 0.18
+    # Minimum radius in pixels to display an atom.
+    "min_radius": 2,  # MIN_ATOM_RADIUS
+}
 
-# Bond segment length (in Ångströms) used for splitting bonds.
-BOND_SEGMENT_LENGTH_ANG = 0.22
+# ================================
+# Arc (ORTEP) Drawing Settings
+# ================================
+ARC_STYLE = {
+    # Factor to flatten arcs to simulate sphere curvature.
+    "flatten": 0.4,  # ARC_FLATTEN
 
-# Define a constant highlight color (red) for selected objects.
-HIGHLIGHT_COLOR = (255, 0, 0)
+    # Thickness for the ORTEP meridian arcs.
+    "meridian_thickness": 2,  # ARC_MERIDIAN_THICKNESS
+}
+
+# ================================
+# Bond Visualization Settings
+# ================================
+COVALENT_BOND = {
+    # Bond thickness in Ångströms.
+    "thickness": 0.18,
+
+    # Bond segment length in Ångströms used for splitting bonds.
+    "segment_length": 0.22,
+
+    # Color for covalent bonds.
+    "color": (0, 0, 0),
+}
+
+NCI_BOND = {
+    # Base bond thickness in Ångströms (to be modified by thickness factor).
+    "thickness": 0.18,
+
+    # Bond segment length in Ångströms.
+    "segment_length": 0.20,
+
+    # Color for non-covalent interaction bonds.
+    "color": (128, 128, 128),
+
+    # Factor to reduce the bond thickness for NCIs.
+    "thickness_factor": 0.4,
+}
+
+# ================================
+# Highlighting Settings
+# ================================
+HIGHLIGHT = {
+    # Color for highlighting selected objects.
+    "color": (255, 0, 0),
+
+    # Additional thickness added to bonds when highlighted.
+    "thickness_delta": 2,
+}
+
+# ================================
+# Viewer Interaction Settings
+# ================================
+VIEWER_INTERACTION = {
+    # Rotation increment (in degrees) per key press.
+    "rotation_increment_deg": 5,
+
+    # Panning increment (in pixels) for view movement.
+    "pan_increment": 10,
+
+    # Zoom factor for key-based zoom adjustments.
+    "key_zoom_factor": 1.05,
+
+    # Zoom factor for mouse wheel zoom adjustments.
+    "mouse_zoom_factor": 1.1,
+
+    # Sensitivity for mouse-driven rotation.
+    "mouse_rotation_sensitivity": 0.5,
+}

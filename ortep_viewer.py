@@ -14,6 +14,7 @@ from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
 from geometry_utils import rotate_point
+from config import VIEWER_INTERACTION
 
 class ViewParams:
     """
@@ -129,29 +130,29 @@ class MoleculeViewer(X11Window):
             self.running = False
             sys.exit(0)
         elif keychar == 'h':
-            self.view_params.ry -= 5
+            self.view_params.ry -= VIEWER_INTERACTION["rotation_increment_deg"]
         elif keychar == 'l':
-            self.view_params.ry += 5
+            self.view_params.ry += VIEWER_INTERACTION["rotation_increment_deg"]
         elif keychar == 'j':
-            self.view_params.rx += 5
+            self.view_params.rx += VIEWER_INTERACTION["rotation_increment_deg"]
         elif keychar == 'k':
-            self.view_params.rx -= 5
+            self.view_params.rx -= VIEWER_INTERACTION["rotation_increment_deg"]
         elif keychar == 'u':
-            self.view_params.rz -= 5
+            self.view_params.rz -= VIEWER_INTERACTION["rotation_increment_deg"]
         elif keychar == 'o':
-            self.view_params.rz += 5
+            self.view_params.rz += VIEWER_INTERACTION["rotation_increment_deg"]
         elif keychar == 'H':
-            self.view_params.x_offset -= 10
+            self.view_params.x_offset -= VIEWER_INTERACTION["pan_increment"]
         elif keychar == 'L':
-            self.view_params.x_offset += 10
+            self.view_params.x_offset += VIEWER_INTERACTION["pan_increment"]
         elif keychar == 'K':
-            self.view_params.y_offset -= 10
+            self.view_params.y_offset -= VIEWER_INTERACTION["pan_increment"]
         elif keychar == 'J':
-            self.view_params.y_offset += 10
+            self.view_params.y_offset += VIEWER_INTERACTION["pan_increment"]
         elif keychar == 'n':
-            self.view_params.scale *= 1.05
+            self.view_params.scale *= VIEWER_INTERACTION["key_zoom_factor"]
         elif keychar == 'm':
-            self.view_params.scale /= 1.05
+            self.view_params.scale /= VIEWER_INTERACTION["key_zoom_factor"]
         elif keychar == 's':
             self.dump_svg()
         else:
@@ -161,9 +162,9 @@ class MoleculeViewer(X11Window):
     def handle_button_press(self, evt):
         if evt.detail in (4, 5):
             if evt.detail == 4:
-                self.view_params.scale *= 1.1
+                self.view_params.scale *= VIEWER_INTERACTION["mouse_zoom_factor"]
             elif evt.detail == 5:
-                self.view_params.scale /= 1.1
+                self.view_params.scale /= VIEWER_INTERACTION["mouse_zoom_factor"]
             self.redraw()
             return
         self.last_mouse_x = evt.event_x
@@ -196,14 +197,13 @@ class MoleculeViewer(X11Window):
         dy = evt.event_y - self.last_mouse_y
         self.last_mouse_x = evt.event_x
         self.last_mouse_y = evt.event_y
-        k_x = 0.5
-        k_y = 0.5
-        k_z = 0.5
+        # Use the configured mouse rotation sensitivity.
+        sensitivity = VIEWER_INTERACTION["mouse_rotation_sensitivity"]
         if self.active_button == 'left':
-            self.view_params.rx += k_x * dy
-            self.view_params.ry += k_y * dx
+            self.view_params.rx += sensitivity * dy
+            self.view_params.ry += sensitivity * dx
         elif self.active_button in ('middle', 'shift-left'):
-            self.view_params.rz += k_z * dx
+            self.view_params.rz += sensitivity * dx
         elif self.active_button == 'right':
             self.view_params.x_offset += dx
             self.view_params.y_offset += dy
@@ -213,7 +213,7 @@ class MoleculeViewer(X11Window):
         if self.active_button in ('left', 'shift-left'):
             dx = evt.event_x - self.click_start_x
             dy = evt.event_y - self.click_start_y
-            if dx*dx + dy*dy < 100:  # treat as a click if movement is minimal
+            if dx * dx + dy * dy < 100:  # treat as a click if movement is minimal
                 clicked_obj = self.hit_test(evt.event_x, evt.event_y)
                 # Determine from active_button whether Shift was held.
                 shift_pressed = (self.active_button == 'shift-left')

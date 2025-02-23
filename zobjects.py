@@ -1,7 +1,6 @@
 # zobjects.py
 
-from config import ARC_FLATTEN, HIGHLIGHT_COLOR
-
+from config import ARC_STYLE, HIGHLIGHT, ATOM_STYLE
 
 class ZObject:
     """
@@ -9,7 +8,7 @@ class ZObject:
     """
     def __init__(self, z_value):
         self.z_value = z_value
-        self.selected = False  # New attribute for selection state
+        self.selected = False  # Selection state
 
     def draw(self, canvas):
         raise NotImplementedError("Subclasses must implement draw().")
@@ -27,31 +26,34 @@ class ZAtom(ZObject):
         self.y2d = y2d
         self.radius = radius
         self.color = color
-        self.atom = None  # To be set to the corresponding ORTEP_Atom instance
+        self.atom = None  # Underlying ORTEP_Atom instance
 
     def draw(self, canvas):
-        # Draw the filled circle and its border.
+        # Draw the filled circle.
         canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=self.color)
-        canvas.draw_circle_border(self.x2d, self.y2d, self.radius, color=(0, 0, 0), thickness=2)
+        # Draw the atom border using the configured border color.
+        canvas.draw_circle_border(self.x2d, self.y2d, self.radius, color=ATOM_STYLE["border_color"], thickness=2)
         
         # Draw ORTEP arcs.
-        MERIDIAN_THICK = 2
+        meridian_thickness = ARC_STYLE["meridian_thickness"]
+        flatten = ARC_STYLE["flatten"]
         canvas.draw_arc(
             self.x2d, self.y2d, 
-            self.radius, int(self.radius * ARC_FLATTEN),
+            self.radius, int(self.radius * flatten),
             angle_start_deg=180, angle_end_deg=360,
-            color=(0, 0, 0), thickness=MERIDIAN_THICK
+            color=ATOM_STYLE["border_color"], thickness=meridian_thickness
         )
         canvas.draw_arc(
             self.x2d, self.y2d, 
-            int(self.radius * ARC_FLATTEN), self.radius,
+            int(self.radius * flatten), self.radius,
             angle_start_deg=270, angle_end_deg=450,
-            color=(0, 0, 0), thickness=MERIDIAN_THICK
+            color=ATOM_STYLE["border_color"], thickness=meridian_thickness
         )
 
         # Draw highlight if the atom is selected.
         if self.selected:
-            canvas.draw_circle_border(self.x2d, self.y2d, self.radius + 4, color=HIGHLIGHT_COLOR, thickness=3)
+            # The extra border offset (+4) remains hard-coded; adjust if needed later.
+            canvas.draw_circle_border(self.x2d, self.y2d, self.radius + 4, color=HIGHLIGHT["color"], thickness=HIGHLIGHT["thickness_delta"])
 
     def contains(self, x, y):
         """
@@ -80,16 +82,16 @@ class ZSegment(ZObject):
         self.y2 = y2
         self.thickness = thickness
         self.color = color
-        self.bond = None  # To be set to the corresponding bond instance
+        self.bond = None  # Underlying bond instance
 
     def draw(self, canvas):
-        # Draw the bond normally.
+        # Draw the bond segment.
         canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
                          thickness=self.thickness, color=self.color)
-        # If selected, overlay a highlight using the same highlight color.
+        # If selected, overlay a highlight using the configured settings.
         if self.selected:
             canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
-                             thickness=self.thickness + 2, color=HIGHLIGHT_COLOR)
+                             thickness=self.thickness + HIGHLIGHT["thickness_delta"], color=HIGHLIGHT["color"])
 
     def contains(self, x, y, tolerance=3):
         """

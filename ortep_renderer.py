@@ -3,8 +3,8 @@
 import math
 from geometry_utils import rotate_point, project_point
 from elements_table import Elements
-from zobjects import ZAtom, ZSegment  # Our drawable objects
-from config import SCALE_ATOM_SPHERE, ARC_FLATTEN, BOND_THICKNESS_ANG, BOND_SEGMENT_LENGTH_ANG
+from zobjects import ZAtom, ZSegment
+from config import ATOM_STYLE, ARC_STYLE
 
 def hex_to_rgb(hex_color):
     """
@@ -39,9 +39,9 @@ class ORTEP_MoleculeRenderer:
             except KeyError:
                 r_covalent = 1.0  # Fallback if unknown
             # Compute the drawn radius in pixels.
-            px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * vp.scale))
+            px_r = max(ATOM_STYLE["min_radius"], int(r_covalent * ATOM_STYLE["scale"] * vp.scale))
             # Compute effective 3D radius for bond clipping (in Å).
-            r_eff = r_covalent * SCALE_ATOM_SPHERE
+            r_eff = r_covalent * ATOM_STYLE["scale"]
 
             # Create a ZAtom for drawing.
             z_atom = ZAtom(

@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 import math
-from config import BOND_SEGMENT_LENGTH_ANG, BOND_THICKNESS_ANG
+from config import COVALENT_BOND, NCI_BOND
 from geometry_utils import project_point
 from zobjects import ZSegment
 
@@ -13,7 +13,7 @@ class Bond(ABC):
     def __init__(self, atom1, atom2):
         self.atom1 = atom1
         self.atom2 = atom2
-        self.selected = False  # New attribute to persist selection state
+        self.selected = False  # Persist selection state
 
     @abstractmethod
     def get_segments(self, rotated_coords, view_params):
@@ -58,14 +58,15 @@ class CovalentBond(Bond):
         vx = x2 - x1
         vy = y2 - y1
         vz = z2 - z1
-        dist = math.sqrt(vx*vx + vy*vy + vz*vz)
+        dist = math.sqrt(vx * vx + vy * vy + vz * vz)
         if dist < 1e-6 or (r_i + r_j >= dist):
             return []
 
         t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
         visible_length = (t_end - t_start) * dist
 
-        N = max(1, int(math.ceil(visible_length / BOND_SEGMENT_LENGTH_ANG)))
+        seg_length = COVALENT_BOND["segment_length"]
+        N = max(1, int(math.ceil(visible_length / seg_length)))
         dt = (t_end - t_start) / N
 
         segments = []
@@ -81,24 +82,25 @@ class CovalentBond(Bond):
             
             zm = 0.5 * (p1[2] + p2[2])
             
-            bond_thickness_px = max(1, int(BOND_THICKNESS_ANG * view_params.scale))
+            bond_thickness_px = max(1, int(COVALENT_BOND["thickness"] * view_params.scale))
             
             seg_obj = ZSegment(
                 x1=X1, y1=Y1, x2=X2, y2=Y2,
                 z_value=zm,
                 thickness=bond_thickness_px,
-                color=(0, 0, 0)
+                color=COVALENT_BOND["color"]
             )
             # Attach underlying bond data.
             seg_obj.bond = self
             segments.append(seg_obj)
+        
         # Store the bond length for later use.
         self.length = dist
         return segments
 
 class NCIBond(Bond):
     """
-    Represents a non-covalent interaction (NCI) bond as a dashed grey line.
+    Represents a non-covalent interaction (NCI) bond as a dashed line.
     """
     def get_segments(self, rotated_coords, view_params):
         (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
@@ -106,20 +108,22 @@ class NCIBond(Bond):
         vx = x2 - x1
         vy = y2 - y1
         vz = z2 - z1
-        dist = math.sqrt(vx*vx + vy*vy + vz*vz)
+        dist = math.sqrt(vx * vx + vy * vy + vz * vz)
         if dist < 1e-6 or (r_i + r_j >= dist):
             return []
 
         t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
         visible_length = (t_end - t_start) * dist
 
-        N = max(1, int(math.ceil(visible_length / BOND_SEGMENT_LENGTH_ANG)))
+        seg_length = NCI_BOND["segment_length"]
+        N = max(1, int(math.ceil(visible_length / seg_length)))
         dt = (t_end - t_start) / N
 
         segments = []
         for seg_index in range(N):
+            # Skip every other segment to create a dashed effect.
             if seg_index % 2 == 1:
-                continue  # Skip every other segment to create dashed effect
+                continue
 
             t1 = t_start + seg_index * dt
             t2 = t_start + (seg_index + 1) * dt
@@ -132,16 +136,19 @@ class NCIBond(Bond):
             
             zm = 0.5 * (p1[2] + p2[2])
             
-            bond_thickness_px = max(1, int((BOND_THICKNESS_ANG * 0.5) * view_params.scale))
+            # Apply the thickness factor for NCI bonds.
+            thickness = NCI_BOND["thickness"] * NCI_BOND["thickness_factor"]
+            bond_thickness_px = max(1, int(thickness * view_params.scale))
             
             seg_obj = ZSegment(
                 x1=X1, y1=Y1, x2=X2, y2=Y2,
                 z_value=zm,
                 thickness=bond_thickness_px,
-                color=(128, 128, 128)
+                color=NCI_BOND["color"]
             )
             # Attach underlying bond data.
             seg_obj.bond = self
             segments.append(seg_obj)
+        
         self.length = dist
         return segments
