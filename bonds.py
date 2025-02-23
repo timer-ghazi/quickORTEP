@@ -13,6 +13,7 @@ class Bond(ABC):
     def __init__(self, atom1, atom2):
         self.atom1 = atom1
         self.atom2 = atom2
+        self.selected = False  # New attribute to persist selection state
 
     @abstractmethod
     def get_segments(self, rotated_coords, view_params):

@@ -3,9 +3,8 @@
 import math
 from geometry_utils import rotate_point, project_point
 from elements_table import Elements
-from zobjects import ZAtom, ZSegment  # Our new drawable objects
-
-from config import SCALE_ATOM_SPHERE, ANGSTROM_TO_PIXEL, BOND_THICKNESS_ANG, BOND_SEGMENT_LENGTH_ANG
+from zobjects import ZAtom, ZSegment  # Our drawable objects
+from config import SCALE_ATOM_SPHERE, ARC_FLATTEN, BOND_THICKNESS_ANG, BOND_SEGMENT_LENGTH_ANG
 
 def hex_to_rgb(hex_color):
     """
@@ -23,29 +22,22 @@ class ORTEP_MoleculeRenderer:
     Responsible for drawing atoms and bonds of an ORTEP_Molecule using
     a painter's algorithm (z-sorting). Bond segmentation is delegated to the bond objects.
     """
-
     def build_render_list(self, ortep_molecule, vp):
-        """
-        Build a list of ZObject instances (ZAtom, ZSegment, etc.) for all atoms and bonds.
-        """
         render_list = []
         rotated_info = []  # List of tuples: (x_rot, y_rot, z_rot, r_eff)
 
-        # --- 1) Process atoms ---
+        # --- Process atoms ---
         for atom in ortep_molecule.atoms:
             # Rotate the atom's position.
-            x_rot, y_rot, z_rot = rotate_point(atom.x, atom.y, atom.z,
-                                               vp.rx, vp.ry, vp.rz)
+            x_rot, y_rot, z_rot = rotate_point(atom.x, atom.y, atom.z, vp.rx, vp.ry, vp.rz)
             # Project to 2D screen coordinates.
             x2d, y2d = project_point(x_rot, y_rot, z_rot, vp)
-
             # Get the covalent radius (in Ångströms).
             try:
                 r_covalent = Elements.covalent_radius(atom.symbol, order="single",
                                                        source="cordero", unit="Ang")
             except KeyError:
                 r_covalent = 1.0  # Fallback if unknown
-
             # Compute the drawn radius in pixels.
             px_r = max(2, int(r_covalent * SCALE_ATOM_SPHERE * vp.scale))
             # Compute effective 3D radius for bond clipping (in Å).
@@ -59,26 +51,26 @@ class ORTEP_MoleculeRenderer:
                 color=self._get_atom_color(atom),
                 z_value=z_rot
             )
-            # Attach underlying atom data.
+            # Attach underlying atom data and propagate its persistent selection state.
             z_atom.atom = atom
-
+            z_atom.selected = atom.selected
             render_list.append(z_atom)
             rotated_info.append((x_rot, y_rot, z_rot, r_eff))
 
-        # --- 2) Process bonds ---
+        # --- Process bonds ---
         for bond in ortep_molecule.bonds:
             try:
                 i = ortep_molecule.atoms.index(bond.atom1)
                 j = ortep_molecule.atoms.index(bond.atom2)
             except ValueError:
                 continue
-
-            # Package rotated coordinates for both atoms.
             rotated_coords = (rotated_info[i], rotated_info[j])
-            # Delegate segmentation to the bond object.
             segments = bond.get_segments(rotated_coords, vp)
-            render_list.extend(segments)
-
+            for seg in segments:
+                seg.bond = bond
+                # Propagate persistent selection state from the underlying bond.
+                seg.selected = getattr(bond, 'selected', False)
+                render_list.append(seg)
         return render_list
 
     def _get_atom_color(self, atom):

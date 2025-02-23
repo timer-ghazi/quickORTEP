@@ -3,13 +3,13 @@
 ortep_viewer.py
 
 The viewer class that manages an ORTEP_Molecule, its renderer, and handles user events.
-Now updated to include multi-selection for atoms and bonds (using Shift-click toggling).
+Now updated to support persistent selection for atoms and bonds by storing selection state
+in the underlying objects.
 """
 
 import sys
 import time
 from Xlib import XK, X
-
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
@@ -34,19 +34,15 @@ class MoleculeViewer(X11Window):
     The controller/view class that manages an ORTEP_Molecule, its renderer,
     and handles user events (key presses, mouse events, etc.).
 
-    New for interactivity:
-    - Multi-selection for atoms and bonds is supported (using Shift-click).
-    - An info message is drawn in the X11 window reporting the current selection.
+    Now supports persistent multi-selection for atoms and bonds.
     """
     def __init__(self, ortep_molecule, width=800, height=600,
                  ss_factor=1, tile_size=128):
-        # Choose the canvas class.
         if ss_factor <= 1:
             canvas_class = X11CanvasBasic
         else:
             canvas_class = lambda w: X11CanvasSS(w, ss_factor=ss_factor,
                                                  tile_size=tile_size)
-
         super().__init__(
             width=width,
             height=height,
@@ -64,16 +60,15 @@ class MoleculeViewer(X11Window):
 
         self.renderer = ORTEP_MoleculeRenderer()
 
-        # Initialize mouse state variables.
+        # Mouse state variables.
         self.active_button = None         # 'left', 'middle', 'right', or 'shift-left'
         self.last_mouse_x = None
         self.last_mouse_y = None
         self.last_click_time = 0.0
 
-        # --- New for hit testing and selection ---
-        # Use lists to store selected atoms and bonds for multi-selection.
-        self.selected_atoms = []  
-        self.selected_bonds = []  
+        # Use lists to store selected underlying objects.
+        self.selected_atoms = []   # List of ORTEP_Atom objects.
+        self.selected_bonds = []   # List of underlying bond objects.
         self.info_message = "No object selected yet."
         self.click_start_x = None
         self.click_start_y = None
@@ -95,32 +90,22 @@ class MoleculeViewer(X11Window):
                                            self.view_params.rz)
             xs.append(x_rot)
             ys.append(y_rot)
-    
         if not xs or not ys:
             return
-    
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
-    
         margin = 20
         available_width = self.canvas.width - 2 * margin
         available_height = self.canvas.height - 2 * margin
-    
         extent_x = max_x - min_x if max_x > min_x else 1.0
         extent_y = max_y - min_y if max_y > min_y else 1.0
-    
-        # Compute the ideal scale to fit the molecule within the margins.
         new_scale = min(available_width / extent_x, available_height / extent_y)
-    
         if new_scale < self.view_params.scale:
             self.view_params.scale = new_scale
-    
-        # Center the molecule.
         center_x = (min_x + max_x) / 2.0
         center_y = (min_y + max_y) / 2.0
         self.view_params.x_offset = self.canvas.width / 2 - center_x * self.view_params.scale
         self.view_params.y_offset = self.canvas.height / 2 - center_y * self.view_params.scale
-    
         self.redraw()
 
     def hit_test(self, x, y):
@@ -137,10 +122,8 @@ class MoleculeViewer(X11Window):
     def handle_key(self, evt):
         keysym = self.display.keycode_to_keysym(evt.detail, evt.state)
         keychar = XK.keysym_to_string(keysym)
-        # Ignore events with no valid key string (e.g., when only modifier keys are pressed).
         if keychar is None:
             return
-
         if keychar in ("q", "Escape"):
             print("Quitting.")
             self.running = False
@@ -173,7 +156,6 @@ class MoleculeViewer(X11Window):
             self.dump_svg()
         else:
             print(f"Ignored key: {keychar}")
-
         self.redraw()
 
     def handle_button_press(self, evt):
@@ -184,16 +166,13 @@ class MoleculeViewer(X11Window):
                 self.view_params.scale /= 1.1
             self.redraw()
             return
-
         self.last_mouse_x = evt.event_x
         self.last_mouse_y = evt.event_y
         if evt.detail == 1:
             self.click_start_x = evt.event_x
             self.click_start_y = evt.event_y
-
         # Check for Shift modifier.
         shift_pressed = bool(evt.state & X.ShiftMask)
-
         if evt.detail == 1:
             if shift_pressed:
                 current_time = time.time()
@@ -213,16 +192,13 @@ class MoleculeViewer(X11Window):
     def handle_motion(self, evt):
         if self.active_button is None:
             return
-
         dx = evt.event_x - self.last_mouse_x
         dy = evt.event_y - self.last_mouse_y
         self.last_mouse_x = evt.event_x
         self.last_mouse_y = evt.event_y
-
         k_x = 0.5
         k_y = 0.5
         k_z = 0.5
-
         if self.active_button == 'left':
             self.view_params.rx += k_x * dy
             self.view_params.ry += k_y * dx
@@ -231,20 +207,18 @@ class MoleculeViewer(X11Window):
         elif self.active_button == 'right':
             self.view_params.x_offset += dx
             self.view_params.y_offset += dy
-
         self.redraw()
 
     def handle_button_release(self, evt):
         if self.active_button in ('left', 'shift-left'):
             dx = evt.event_x - self.click_start_x
             dy = evt.event_y - self.click_start_y
-            # If movement is minimal, treat as a click.
-            if dx*dx + dy*dy < 100:
+            if dx*dx + dy*dy < 100:  # treat as a click if movement is minimal
                 clicked_obj = self.hit_test(evt.event_x, evt.event_y)
-                # Use stored active_button info to determine if Shift was held.
+                # Determine from active_button whether Shift was held.
                 shift_pressed = (self.active_button == 'shift-left')
                 if clicked_obj is None:
-                    # Clicked empty space: clear all selections.
+                    # Clear all selections.
                     for atom in self.selected_atoms:
                         atom.selected = False
                     self.selected_atoms = []
@@ -253,75 +227,68 @@ class MoleculeViewer(X11Window):
                     self.selected_bonds = []
                     self.info_message = "No object selected"
                 else:
-                    # If the clicked object is an atom.
+                    # Process atom selection.
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
-                        # Clear any bond selections.
+                        # Clear bond selections.
                         for bond in self.selected_bonds:
                             bond.selected = False
                         self.selected_bonds = []
+                        underlying_atom = clicked_obj.atom
                         if shift_pressed:
-                            # Toggle atom selection.
-                            if clicked_obj in self.selected_atoms:
-                                clicked_obj.selected = False
-                                self.selected_atoms.remove(clicked_obj)
+                            if underlying_atom in self.selected_atoms:
+                                underlying_atom.selected = False
+                                self.selected_atoms.remove(underlying_atom)
                             else:
-                                clicked_obj.selected = True
-                                self.selected_atoms.append(clicked_obj)
+                                underlying_atom.selected = True
+                                self.selected_atoms.append(underlying_atom)
                         else:
-                            # Clear previous atom selections and select this one.
                             for atom in self.selected_atoms:
                                 atom.selected = False
-                            self.selected_atoms = [clicked_obj]
-                            clicked_obj.selected = True
-                        # Update info message.
+                            self.selected_atoms = [underlying_atom]
+                            underlying_atom.selected = True
                         if len(self.selected_atoms) == 1:
-                            a = self.selected_atoms[0].atom
+                            a = self.selected_atoms[0]
                             self.info_message = f"Atom: {a.symbol}{a.index}"
                         else:
-                            sel_info = ", ".join(f"{atom.atom.symbol}{atom.atom.index}" for atom in self.selected_atoms)
+                            sel_info = ", ".join(f"{a.symbol}{a.index}" for a in self.selected_atoms)
                             self.info_message = f"Selected atoms: {sel_info}"
-                    # If the clicked object is a bond.
+                    # Process bond selection.
                     elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
-                        # Clear any atom selections.
+                        # Clear atom selections.
                         for atom in self.selected_atoms:
                             atom.selected = False
                         self.selected_atoms = []
+                        underlying_bond = clicked_obj.bond
                         if shift_pressed:
-                            # Toggle bond selection.
-                            if clicked_obj in self.selected_bonds:
-                                clicked_obj.selected = False
-                                self.selected_bonds.remove(clicked_obj)
+                            if underlying_bond in self.selected_bonds:
+                                underlying_bond.selected = False
+                                self.selected_bonds.remove(underlying_bond)
                             else:
-                                clicked_obj.selected = True
-                                self.selected_bonds.append(clicked_obj)
+                                underlying_bond.selected = True
+                                self.selected_bonds.append(underlying_bond)
                         else:
-                            # Clear previous bond selections and select this one.
                             for bond in self.selected_bonds:
                                 bond.selected = False
-                            self.selected_bonds = [clicked_obj]
-                            clicked_obj.selected = True
-                        # Update info message for bonds.
+                            self.selected_bonds = [underlying_bond]
+                            underlying_bond.selected = True
                         if len(self.selected_bonds) == 1:
-                            b = clicked_obj.bond
+                            b = underlying_bond
                             self.info_message = (f"Bond: {b.atom1.symbol}{b.atom1.index} - "
                                                  f"{b.atom2.symbol}{b.atom2.index} {b.length:.4f} Ang")
                         else:
                             sel_info = ", ".join(
-                                f"{bond.bond.atom1.symbol}{bond.bond.atom1.index}-{bond.bond.atom2.symbol}{bond.bond.atom2.index}"
-                                for bond in self.selected_bonds)
+                                f"{b.atom1.symbol}{b.atom1.index}-{b.atom2.symbol}{b.atom2.index}"
+                                for b in self.selected_bonds)
                             self.info_message = f"Selected bonds: {sel_info}"
                     else:
-                        # Fallback for unrecognized objects.
+                        # Unrecognized object; clear selections.
                         for atom in self.selected_atoms:
                             atom.selected = False
                         self.selected_atoms = []
                         for bond in self.selected_bonds:
                             bond.selected = False
                         self.selected_bonds = []
-                        if hasattr(clicked_obj, 'x2d'):
-                            self.info_message = f"Selected Atom at ({clicked_obj.x2d}, {clicked_obj.y2d})"
-                        else:
-                            self.info_message = "Selected Bond segment"
+                        self.info_message = "No object selected"
                 print(self.info_message)
                 self.redraw()
         self.active_button = None

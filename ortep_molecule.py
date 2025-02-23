@@ -11,6 +11,7 @@ class ORTEP_Atom:
         self.y = y
         self.z = z
         self.index = index
+        self.selected = False  # New attribute to persist selection state
 
 class ORTEP_Molecule:
     """
