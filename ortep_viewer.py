@@ -4,8 +4,9 @@ ortep_viewer.py
 
 The viewer class that manages an ORTEP_Molecule, its renderer, and handles user events.
 Now updated to support:
-  - Uppercase 'B' to toggle (create/remove) a bond between two selected atoms.
-  - Lowercase 'b' to cycle through all bond types (without removal) when a bond is selected.
+  - Uppercase 'B' toggles a bond between two selected atoms.
+  - Lowercase 'b' cycles through bond types (without removal) for a selected bond.
+  - A multi-line HUD panel displaying current state information.
 """
 
 import sys
@@ -16,13 +17,13 @@ from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
 from geometry_utils import rotate_point
 from config import VIEWER_INTERACTION
-
-# Import the bond manager functions and cycle lists.
 from bond_manager import (
     cycle_existing_bond,
     cycle_atom_pair,
     toggle_bond,
 )
+# Import our new HUDPanel
+from hud import HUDPanel
 
 class ViewParams:
     """
@@ -40,12 +41,11 @@ class ViewParams:
 
 class MoleculeViewer(X11Window):
     """
-    The controller/view class that manages an ORTEP_Molecule, its renderer,
-    and handles user events (key presses, mouse events, etc.).
+    The controller/view class that manages an ORTEP_Molecule, its renderer, and handles user events.
     
-    - Uppercase 'B' toggles a bond: if two atoms are selected, it will create a bond (if none exists)
-      or remove the bond (if one exists).
+    - Uppercase 'B' toggles a bond: if two atoms are selected, creates or removes the bond.
     - Lowercase 'b' cycles through bond types (without removal) for a selected bond.
+    - Displays a multi-line HUD panel with current state information.
     """
     def __init__(self, ortep_molecule, width=800, height=600,
                  ss_factor=1, tile_size=128):
@@ -60,7 +60,6 @@ class MoleculeViewer(X11Window):
             title="ORTEP Style Molecule (Refactored)",
             canvas_class=canvas_class
         )
-
         self.ortep_mol = ortep_molecule
         self.view_params = ViewParams(
             rx=0.0, ry=0.0, rz=0.0,
@@ -68,8 +67,10 @@ class MoleculeViewer(X11Window):
             x_offset=width // 2,
             y_offset=height // 2
         )
-
         self.renderer = ORTEP_MoleculeRenderer()
+
+        # Instantiate the HUDPanel for displaying multi-line info.
+        self.hud_panel = HUDPanel(x=10, y_offset=20, line_spacing=20, font_size=14, color=(0, 0, 0))
 
         # Mouse state variables.
         self.active_button = None         # 'left', 'middle', 'right', or 'shift-left'
@@ -77,19 +78,45 @@ class MoleculeViewer(X11Window):
         self.last_mouse_y = None
         self.last_click_time = 0.0
 
-        # Use lists to store selected underlying objects.
+        # Lists for storing selected objects.
         self.selected_atoms = []   # List of ORTEP_Atom objects.
         self.selected_bonds = []   # List of underlying bond objects.
-        self.info_message = "No object selected yet."
         self.click_start_x = None
         self.click_start_y = None
+
+    def update_info_message(self):
+        """
+        Build the list of HUD lines based on the current state and update the HUDPanel.
+        """
+        lines = []
+        if self.selected_bonds:
+            b = self.selected_bonds[0]
+            bond_type = type(b).__name__.replace("Bond", "")
+            # Determine the next bond type in the cycle.
+            from bond_manager import NON_REMOVAL_BOND_CYCLE, get_next_bond_type
+            next_bond = get_next_bond_type(b, NON_REMOVAL_BOND_CYCLE)
+            next_bond_type = next_bond.__name__.replace("Bond", "") if next_bond else "None"
+            lines.append(f"Bond: {b.atom1.symbol}{b.atom1.index}-{b.atom2.symbol}{b.atom2.index} | Type: {bond_type} | Length: {b.length:.4f} Å")
+            lines.append(f"Next bond type: {next_bond_type}")
+        elif self.selected_atoms:
+            sel_info = ", ".join(f"{a.symbol}{a.index}" for a in self.selected_atoms)
+            lines.append(f"Selected atoms: {sel_info}")
+        else:
+            lines.append("No object selected.")
+            lines.append("Click to select an atom; Shift-click to multi-select.")
+        
+        # Append view parameters.
+        lines.append(f"View: rx={self.view_params.rx:.1f}°, ry={self.view_params.ry:.1f}°, rz={self.view_params.rz:.1f}°")
+        lines.append(f"Zoom: {self.view_params.scale:.1f}")
+        
+        self.hud_panel.update_lines(lines)
 
     def redraw(self):
         self.canvas.clear()
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
-        # Draw the info text message at the bottom left.
-        self.canvas.draw_text(10, self.canvas.height - 20,
-                              self.info_message, color=(0, 0, 0), font_size=14)
+        # Update the HUD information and then draw the HUD panel.
+        self.update_info_message()
+        self.hud_panel.draw(self.canvas)
         self.canvas.flush()
 
     def fit_molecule_to_window(self):
@@ -135,6 +162,7 @@ class MoleculeViewer(X11Window):
         keychar = XK.keysym_to_string(keysym)
         if keychar is None:
             return
+
         if keychar in ("q", "Escape"):
             print("Quitting.")
             self.running = False
@@ -171,20 +199,15 @@ class MoleculeViewer(X11Window):
                 atom1, atom2 = self.selected_atoms
                 toggled = toggle_bond(atom1, atom2, self.ortep_mol)
                 if toggled:
-                    self.info_message = (f"Bond created: {toggled.atom1.symbol}{toggled.atom1.index}-"
-                                         f"{toggled.atom2.symbol}{toggled.atom2.index}")
-                    # Clear atom selection and select the new bond.
+                    # Clear atom selection and update bond selection.
                     for a in self.selected_atoms:
                         a.selected = False
                     self.selected_atoms = []
                     toggled.selected = True
                     self.selected_bonds = [toggled]
                 else:
-                    self.info_message = "Bond removed."
-                    self.selected_atoms = []  # keep cleared
+                    self.selected_atoms = []
                     self.selected_bonds = []
-            else:
-                self.info_message = "Select exactly two atoms to toggle bond."
         elif keychar == 'b':
             # --- Bond Cycling Logic (Lowercase b) ---
             if self.selected_bonds:
@@ -193,16 +216,9 @@ class MoleculeViewer(X11Window):
                     new_bond = cycle_existing_bond(bond, self.ortep_mol)
                     new_bonds.append(new_bond)
                 self.selected_bonds = new_bonds
-                if len(new_bonds) == 1:
-                    b = new_bonds[0]
-                    self.info_message = (f"Bond updated: {b.atom1.symbol}{b.atom1.index}-"
-                                         f"{b.atom2.symbol}{b.atom2.index}")
-                else:
-                    self.info_message = "Bond(s) updated."
-            else:
-                self.info_message = "Select a bond to cycle its type."
         else:
             print(f"Ignored key: {keychar}")
+
         self.redraw()
 
     def handle_button_press(self, evt):
@@ -268,9 +284,9 @@ class MoleculeViewer(X11Window):
                     for bond in self.selected_bonds:
                         bond.selected = False
                     self.selected_bonds = []
-                    self.info_message = "No object selected"
                 else:
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
+                        # Clear bond selection when selecting an atom.
                         for bond in self.selected_bonds:
                             bond.selected = False
                         self.selected_bonds = []
@@ -287,13 +303,8 @@ class MoleculeViewer(X11Window):
                                 atom.selected = False
                             self.selected_atoms = [underlying_atom]
                             underlying_atom.selected = True
-                        if len(self.selected_atoms) == 1:
-                            a = self.selected_atoms[0]
-                            self.info_message = f"Atom: {a.symbol}{a.index}"
-                        else:
-                            sel_info = ", ".join(f"{a.symbol}{a.index}" for a in self.selected_atoms)
-                            self.info_message = f"Selected atoms: {sel_info}"
                     elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
+                        # Clear atom selection when selecting a bond.
                         for atom in self.selected_atoms:
                             atom.selected = False
                         self.selected_atoms = []
@@ -310,15 +321,6 @@ class MoleculeViewer(X11Window):
                                 bond.selected = False
                             self.selected_bonds = [underlying_bond]
                             underlying_bond.selected = True
-                        if len(self.selected_bonds) == 1:
-                            b = self.selected_bonds[0]
-                            self.info_message = (f"Bond: {b.atom1.symbol}{b.atom1.index} - "
-                                                 f"{b.atom2.symbol}{b.atom2.index} {b.length:.4f} Ang")
-                        else:
-                            sel_info = ", ".join(
-                                f"{b.atom1.symbol}{b.atom1.index}-{b.atom2.symbol}{b.atom2.index}"
-                                for b in self.selected_bonds)
-                            self.info_message = f"Selected bonds: {sel_info}"
                     else:
                         for atom in self.selected_atoms:
                             atom.selected = False
@@ -326,8 +328,6 @@ class MoleculeViewer(X11Window):
                         for bond in self.selected_bonds:
                             bond.selected = False
                         self.selected_bonds = []
-                        self.info_message = "No object selected"
-                print(self.info_message)
                 self.redraw()
         self.active_button = None
 
