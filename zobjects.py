@@ -1,6 +1,7 @@
 # zobjects.py
 
-from config import ARC_FLATTEN
+from config import ARC_FLATTEN, HIGHLIGHT_COLOR
+
 
 class ZObject:
     """
@@ -8,6 +9,7 @@ class ZObject:
     """
     def __init__(self, z_value):
         self.z_value = z_value
+        self.selected = False  # New attribute for selection state
 
     def draw(self, canvas):
         raise NotImplementedError("Subclasses must implement draw().")
@@ -47,6 +49,10 @@ class ZAtom(ZObject):
             color=(0, 0, 0), thickness=MERIDIAN_THICK
         )
 
+        # Draw highlight if the atom is selected.
+        if self.selected:
+            canvas.draw_circle_border(self.x2d, self.y2d, self.radius + 4, color=HIGHLIGHT_COLOR, thickness=3)
+
     def contains(self, x, y):
         """
         Determine whether the point (x, y) lies within the atom's circle.
@@ -77,8 +83,13 @@ class ZSegment(ZObject):
         self.bond = None  # To be set to the corresponding bond instance
 
     def draw(self, canvas):
+        # Draw the bond normally.
         canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
                          thickness=self.thickness, color=self.color)
+        # If selected, overlay a highlight using the same highlight color.
+        if self.selected:
+            canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
+                             thickness=self.thickness + 2, color=HIGHLIGHT_COLOR)
 
     def contains(self, x, y, tolerance=3):
         """

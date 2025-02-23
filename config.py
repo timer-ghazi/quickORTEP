@@ -17,3 +17,6 @@ BOND_THICKNESS_ANG = 0.18
 
 # Bond segment length (in Ångströms) used for splitting bonds.
 BOND_SEGMENT_LENGTH_ANG = 0.15
+
+# Define a constant highlight color (red) for selected objects.
+HIGHLIGHT_COLOR = (255, 0, 0)
