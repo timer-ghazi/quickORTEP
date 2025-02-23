@@ -240,7 +240,7 @@ class MoleculeViewer(X11Window):
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
                         a = clicked_obj.atom
                         if hasattr(a, 'index'):
-                            self.info_message = f"Selected Atom {a.index}: {a.symbol}"
+                            self.info_message = f"Selected Atom: {a.symbol}{a.index}"
                         else:
                             self.info_message = f"Selected Atom: {a.symbol}"
                     # For bonds: if an underlying bond is attached, show connected atoms and bond length.
@@ -248,11 +248,11 @@ class MoleculeViewer(X11Window):
                         b = clicked_obj.bond
                         # Check for atom index; if missing, just show symbol.
                         if hasattr(b.atom1, 'index') and hasattr(b.atom2, 'index'):
-                            self.info_message = (f"Selected Bond: {b.atom1.index} ({b.atom1.symbol}) - "
-                                                 f"{b.atom2.index} ({b.atom2.symbol}); Length: {b.length:.2f} Å")
+                            self.info_message = (f"Selected Bond: {b.atom1.symbol}{b.atom1.index} - "
+                                                 f"{b.atom2.symbol}{b.atom2.index} ; Length: {b.length:.4f} Å")
                         else:
                             self.info_message = (f"Selected Bond: {b.atom1.symbol} - "
-                                                 f"{b.atom2.symbol}; Length: {b.length:.2f} Å")
+                                                 f"{b.atom2.symbol}; Length: {b.length:.4f} Å")
                     else:
                         # Fallback if no extra info is attached.
                         if hasattr(clicked_obj, 'x2d'):
