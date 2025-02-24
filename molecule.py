@@ -5,14 +5,16 @@
 # a covalent adjacency matrix using data from elements_table.py,
 # and providing geometry utilities (distance, angle, dihedral).
 #
-# This example includes:
-#  1) An inline Atom dataclass.
-#  2) The Molecule class with the methods described.
-#  3) A command-line "main" entry point for testing.
+# This version adds handling for extra metadata:
+#   - XYZ_Comment
+#   - Energy
+#   - file_name (stripped of the .xyz extension)
+#   - frame_number
 # 
 # Wed Feb 19 2025
-# - added Gaussian-style standard orientaion method
+# - added Gaussian-style standard orientation method
 # - universal XYZ `read_xyz_data()` method for reading any type of XYZ 
+# - extended to store & parse metadata in XYZ comments (energy, etc.)
 
 import sys
 import math
@@ -49,6 +51,12 @@ class Molecule:
         atoms (List[Atom]): List of Atom objects.
         bond_matrix (np.ndarray): 2D adjacency matrix of shape (n, n), storing bond information.
         fragments (Dict[int, List[int]]): Mapping of fragment_id -> list of atom indices.
+
+    Additional metadata attributes:
+        XYZ_Comment (str | None): The raw comment line from the XYZ file (if any).
+        Energy (float | None): Parsed or user-provided energy (units unspecified).
+        file_name (str | None): The file name (minus .xyz) from which data was read.
+        frame_number (int | None): The index or ID for this molecule in a trajectory.
     """
 
     def __init__(self, title: str = ""):
@@ -56,6 +64,13 @@ class Molecule:
         self.atoms = []               # type: List[Atom]
         self.bond_matrix = None       # type: np.ndarray
         self.fragments = {}           # type: Dict[int, List[int]]
+
+        # New metadata fields
+        self.XYZ_Comment = None       # Raw second line (or user-supplied comment)
+        self.Energy = None            # Parsed or user-supplied energy
+        self.file_name = None         # File name minus .xyz
+        self.frame_number = None      # Frame index in a trajectory
+
 
     @classmethod
     def from_atoms(cls, atoms: List[Tuple[str, float, float, float]], title: str = "") -> "Molecule":
@@ -72,79 +87,146 @@ class Molecule:
         mol.bond_matrix = np.zeros((n, n), dtype=float)
         return mol
 
+
     def read_xyz_data(self,
                       data: Optional[Union[str, List[str]]] = None,
                       file_name: Optional[str] = None,
-                      units: str = "Ang") -> None:
+                      units: str = "Ang",
+                      xyz_comment: Optional[str] = None,
+                      energy: Optional[float] = None,
+                      frame_number: Optional[int] = None) -> None:
         """
         Reads XYZ data from a file or directly from a string/list of lines, converts
-        the coordinates to Ångströms (if necessary), and populates the molecule's atoms and title.
-    
+        the coordinates to Ångströms (if necessary), and populates the molecule's
+        atoms, title, and metadata fields.
+
         Parameters:
-            data: Either a multi-line string or a list of strings representing the XYZ data.
-            file_name: Optional path to a file containing XYZ data. If provided, this takes precedence over 'data'.
-            units: Units in which the coordinates are given. Defaults to "Ang" (Ångströms).
-                   Other supported units include "pm", "nm", "bohr", etc.
+            data: 
+                Either a multi-line string or a list of strings representing the XYZ data.
+            file_name: 
+                Path to a file containing XYZ data. If provided, this takes precedence over 'data'.
+                We also store the base file name (minus .xyz) in self.file_name.
+            units: 
+                Units in which the coordinates are given. Defaults to "Ang" (Ångströms).
+                Other supported units include "pm", "nm", "bohr", etc.
+            xyz_comment:
+                Optional explicit comment for the molecule, overriding anything read
+                from the second line of the XYZ file.
+            energy:
+                Optional explicit energy, overriding anything parsed from the comment.
+            frame_number:
+                If provided, identifies which frame of a trajectory this data belongs to.
         """
         # If a file name is provided, read from file.
         if file_name is not None:
             with open(file_name, 'r') as f:
                 data = f.read()
-    
+            # Strip off .xyz if present, store as self.file_name
+            base = file_name
+            if base.endswith(".xyz"):
+                base = base[:-4]
+            self.file_name = base
+
         if data is None:
             raise ValueError("No XYZ data provided (neither data nor file_name).")
-    
+
         # Normalize data to a list of lines.
         if isinstance(data, str):
             lines = data.splitlines()
         else:
             lines = data
-    
+
         # Remove empty or whitespace-only lines.
         lines = [line.strip() for line in lines if line.strip()]
         if not lines:
             raise ValueError("No valid lines found in the provided data.")
-    
+
         # Determine conversion factor to convert coordinates to Å.
-        # The conversion factor is computed as 1.0 / factor from the unit alias dictionary from elements_table 
         unit_key = units.lower()
         if unit_key in _DISTANCE_UNIT_ALIASES:
             _, factor = _DISTANCE_UNIT_ALIASES[unit_key]
             conversion_factor = 1.0 / factor
         else:
             conversion_factor = 1.0
-    
-        title = ""
+
+        # We'll store an intermediate variable that might become self.XYZ_Comment if none is passed.
+        potential_comment_line = ""
         atom_lines: List[str] = []
-    
+
         # Check if the first line is numeric (possible header).
         try:
             expected_atom_count = int(lines[0])
+            # We have a numeric first line => standard XYZ format with atom count
             if len(lines) == expected_atom_count + 1:
-                # No comment line.
+                # There's no separate comment line, everything else is presumably atom lines
                 atom_lines = lines[1:]
             elif len(lines) >= expected_atom_count + 2:
                 # If the second line is non-numeric, treat it as a comment/title.
                 try:
                     int(lines[1])
-                    # If it parses as an int, then no comment is present.
-                    atom_lines = lines[1:expected_atom_count+1]
+                    # If it parses as an int, then no comment line is present.
+                    atom_lines = lines[1:expected_atom_count + 1]
                 except ValueError:
-                    title = lines[1]
-                    atom_lines = lines[2:expected_atom_count+2]
+                    # The second line is indeed some sort of comment
+                    potential_comment_line = lines[1]
+                    atom_lines = lines[2:expected_atom_count + 2]
             else:
-                # Fallback to header-less parsing.
+                # Fallback to header-less parsing if something is mismatched
                 atom_lines = lines
+
         except ValueError:
-            # First line isn't numeric; assume header-less format.
+            # First line isn't numeric; assume header-less format => all lines are atom lines
             atom_lines = lines
-    
-        # Validate that we have the expected number of atom lines, if applicable.
+
+        # If the user provided an explicit xyz_comment, use that, else use the potential_comment_line
+        if xyz_comment is not None:
+            self.XYZ_Comment = xyz_comment
+        else:
+            # If there's a second line from the file, store it here
+            self.XYZ_Comment = potential_comment_line if potential_comment_line else None
+
+        # Parse or store Energy
+        if energy is not None:
+            self.Energy = energy
+        else:
+            # Attempt to parse from the comment line if present
+            if self.XYZ_Comment:
+                self.Energy = self._parse_energy(self.XYZ_Comment)
+            else:
+                self.Energy = None
+
+        # Set frame_number if provided
+        self.frame_number = frame_number
+
+        # We'll decide on the final self.title
+        # If it was not set externally (the constructor might have set one),
+        # we either use the comment line or a fallback to file_name.
+        if not self.title:
+            if not self.XYZ_Comment:
+                # If no comment line at all, try file_name
+                if self.file_name and self.frame_number is not None:
+                    self.title = f"{self.file_name}_{self.frame_number:03d}"
+                elif self.file_name:
+                    self.title = self.file_name
+                else:
+                    self.title = ""
+            else:
+                # We do have some comment line, but it might or might not be meaningful.
+                # We'll keep it simple: use the entire comment if not purely numeric.
+                # If you want a more detailed logic, you could do further checks.
+                # But for now, let's set title to the comment line.
+                self.title = self.XYZ_Comment
+                # If it looks like the comment line is just the energy, we can fallback to file_name:
+                if self._looks_like_just_energy(self.XYZ_Comment) and self.file_name:
+                    if self.frame_number is not None:
+                        self.title = f"{self.file_name}_{self.frame_number:03d}"
+                    else:
+                        self.title = self.file_name
+
+        # Now parse the atom lines as before
         if 'expected_atom_count' in locals() and len(atom_lines) != expected_atom_count:
             print(f"Warning: Expected {expected_atom_count} atoms, but found {len(atom_lines)} lines.")
-    
-        # Populate the molecule's attributes.
-        self.title = title
+
         self.atoms = []
         for line in atom_lines:
             parts = line.split()
@@ -164,15 +246,19 @@ class Molecule:
             except ValueError as e:
                 raise ValueError(f"Error parsing coordinates in line: '{line}'. {e}")
             self.atoms.append(Atom(symbol, x, y, z))
-    
+
         n = len(self.atoms)
         self.bond_matrix = np.zeros((n, n), dtype=float)
+
 
     @classmethod
     def from_xyz_data(cls,
                       data: Optional[Union[str, List[str]]] = None,
                       file_name: Optional[str] = None,
-                      units: str = "Ang") -> "Molecule":
+                      units: str = "Ang",
+                      xyz_comment: Optional[str] = None,
+                      energy: Optional[float] = None,
+                      frame_number: Optional[int] = None) -> "Molecule":
         """
         Convenience class method to construct a Molecule from XYZ data.
 
@@ -183,12 +269,17 @@ class Molecule:
             data: Either a multi-line string or a list of strings representing the XYZ data.
             file_name: Optional path to a file containing XYZ data. If provided, this takes precedence over 'data'.
             units: Units in which the coordinates are given. Defaults to "Ang" (Ångströms).
-
-        Returns:
-            A new Molecule instance populated with the XYZ data.
+            xyz_comment: Optional explicit comment line.
+            energy: Optional explicit energy value.
+            frame_number: Optional frame index.
         """
         mol = cls()
-        mol.read_xyz_data(data=data, file_name=file_name, units=units)
+        mol.read_xyz_data(data=data,
+                          file_name=file_name,
+                          units=units,
+                          xyz_comment=xyz_comment,
+                          energy=energy,
+                          frame_number=frame_number)
         return mol
 
     def detect_bonds(self, tolerance: float = 0.3):
@@ -330,45 +421,12 @@ class Molecule:
         
         The procedure is as follows:
         
-        1. **Centering:**  
-           Compute the center of nuclear charge (or mass) and translate all coordinates so that
-           the center is at the origin. That is,
-           $$
-           \mathbf{T} = \frac{\sum_i w_i \mathbf{r}_i}{\sum_i w_i}, \quad
-           \mathbf{r}_i' = \mathbf{r}_i - \mathbf{T},
-           $$
-           where $w_i$ is either the atomic number or atomic mass.
-        
-        2. **Inertia Tensor Construction:**  
-           Build the inertia tensor using the weighted centered coordinates:
-           $$
-           I = \sum_i w_i \Bigl(\|\mathbf{r}_i'\|^2\, \mathbf{I}_{3\times3} - \mathbf{r}_i' \mathbf{r}_i'^{T}\Bigr).
-           $$
-        
-        3. **Diagonalization:**  
-           Diagonalize $I$ to obtain eigenvalues and eigenvectors (the principal axes).
-        
-        4. **Rotation Matrix Construction:**  
-           Adopt the following convention:
-           - New $x$-axis is the eigenvector corresponding to the largest eigenvalue,
-           - New $y$-axis is the eigenvector corresponding to the intermediate eigenvalue,
-           - New $z$-axis is the eigenvector corresponding to the smallest eigenvalue.
-           
-           That is, if $\lambda_0 \le \lambda_1 \le \lambda_2$, then set
-           $$
-           R = \begin{pmatrix} \mathbf{v}_{x} & \mathbf{v}_{y} & \mathbf{v}_{z} \end{pmatrix}
-           = \begin{pmatrix} \mathbf{v}_{\lambda_2} & \mathbf{v}_{\lambda_1} & \mathbf{v}_{\lambda_0} \end{pmatrix}.
-           $$
-           Finally, ensure that $\det(R) = +1$ (right-handed coordinate system).
-        
-        5. **Coordinate Transformation:**  
-           The final standard orientation coordinates are given by:
-           $$
-           \mathbf{r}_{\text{std}} = (\mathbf{r} - \mathbf{T}) \cdot R.
-           $$
-           Update the molecule's atomic coordinates with these values.
+        1. **Centering**  
+        2. **Inertia Tensor Construction**  
+        3. **Diagonalization**  
+        4. **Rotation Matrix Construction**  
+        5. **Coordinate Transformation**  
         """
-        # Extract original coordinates.
         coords = np.array([[atom.x, atom.y, atom.z] for atom in self.atoms])
         
         # Compute weights based on atomic numbers or masses.
@@ -441,38 +499,27 @@ class Molecule:
         """
         Diagonalizes the inertia tensor.
         
-        Parameters:
-            I: The inertia tensor.
-        
         Returns:
-            A tuple (eigenvalues, eigenvectors) from the diagonalization.
-            Eigenvalues are returned in ascending order.
+            (eigenvalues, eigenvectors), sorted in ascending order of eigenvalues.
         """
         eigenvalues, eigenvectors = np.linalg.eigh(I)
         return eigenvalues, eigenvectors
 
     def _build_rotation_matrix(self, eigenvalues: np.ndarray, eigenvectors: np.ndarray) -> np.ndarray:
         """
-        Builds the rotation matrix based on eigenvalues and eigenvectors.
-        Adopts the convention that the new x-axis corresponds to the largest eigenvalue,
-        y-axis to the intermediate, and z-axis to the smallest eigenvalue.
-        Ensures a right-handed coordinate system.
-        
-        Parameters:
-            eigenvalues: Array of eigenvalues.
-            eigenvectors: Corresponding eigenvectors.
-        
-        Returns:
-            A 3x3 rotation matrix.
+        Builds the rotation matrix from the eigenvectors, adopting the
+        convention that the new x-axis = largest eigenvalue, y-axis = middle, z-axis = smallest.
+        Ensures a right-handed system.
         """
-        # Sort indices: idx[0] smallest, idx[2] largest.
+        # Sort indices: idx[0] smallest, idx[2] largest
         idx = np.argsort(eigenvalues)
         v_small = eigenvectors[:, idx[0]]
         v_mid   = eigenvectors[:, idx[1]]
         v_large = eigenvectors[:, idx[2]]
-        # Build rotation matrix (columns are new x, y, z axes)
+
+        # Build rotation matrix (columns: new x, y, z)
         R = np.column_stack((v_large, v_mid, v_small))
-        # Ensure right-handed coordinate system.
+        # Ensure right-handed coordinate system
         if np.linalg.det(R) < 0:
             R[:, 0] *= -1
         return R
@@ -480,23 +527,13 @@ class Molecule:
     def _apply_transformation(self, coords: np.ndarray, R: np.ndarray) -> np.ndarray:
         """
         Applies the rotation (or transformation) matrix to the coordinates.
-        
-        Parameters:
-            coords: Array of coordinates (centered).
-            R: Rotation matrix.
-        
-        Returns:
-            Transformed coordinates.
         """
         return np.dot(coords, R)
 
     def _update_atom_coordinates(self, coords_std: np.ndarray) -> None:
         """
         Updates the molecule's atoms with the new coordinates.
-        Note: Swaps axes to match Gaussian's standard orientation convention.
-        
-        Parameters:
-            coords_std: The standard orientation coordinates.
+        Swaps axes to match Gaussian's standard orientation convention.
         """
         for i, atom in enumerate(self.atoms):
             # Swap axes: assign atom.z, atom.y, atom.x from coords_std[i]
@@ -524,10 +561,10 @@ class Molecule:
 
         The output format is as follows:
 
-        <number of atoms>
-        <title>
-        <atom symbol> <x> <y> <z>
-
+            <number of atoms>
+            <title>
+            <atom symbol> <x> <y> <z>
+        
         Each atom line is formatted with the atomic symbol left-aligned in a field of 5 characters,
         and each coordinate is printed in a field of 17 characters with 12 decimal places.
         """
@@ -542,12 +579,72 @@ class Molecule:
             lines.append(f"{atom.symbol:<5}{atom.x:17.12f}{atom.y:17.12f}{atom.z:17.12f}")
         return "\n".join(lines)
 
+    @staticmethod
+    def _parse_energy(comment_line: str) -> Optional[float]:
+        """
+        Attempt to parse a floating-point energy from the given comment line using a
+        tiered approach:
+        
+        1) Look for a labeled pattern like "Energy=...", "E=...", ignoring case.
+        2) If not found, see if there's exactly one float in the entire line.
+        3) Otherwise, return None.
+        """
+        if not comment_line.strip():
+            return None
+
+        # Step 1: labeled pattern (case-insensitive)
+        # e.g. E= -75.1234, Energy: +0.45, etc.
+        labeled_pattern = r"(?i)(?:energy|e)\s*[:=]?\s*([-+]?\d+(\.\d+)?([eE][+-]?\d+)?)"
+        match = re.search(labeled_pattern, comment_line)
+        if match:
+            return float(match.group(1))
+
+        # Step 2: if no labeled pattern, see if there's exactly one float
+        all_floats = re.findall(
+            r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?",
+            comment_line
+        )
+        if len(all_floats) == 1:
+            return float(all_floats[0])
+
+        return None
+
+    @staticmethod
+    def _looks_like_just_energy(comment_line: str) -> bool:
+        """
+        Heuristic check: if the line yields one parseable float or a labeled 'energy',
+        and there's minimal extra text, treat it as "just an energy."
+        """
+        if not comment_line.strip():
+            return True
+
+        # If we found an energy using the parse method...
+        possible_energy = Molecule._parse_energy(comment_line)
+        if possible_energy is None:
+            return False
+
+        # Check how many floats are in the line
+        all_floats = re.findall(
+            r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?",
+            comment_line
+        )
+
+        # If there's exactly 1 float, and the rest is basically "energy/E" text, treat it as just energy
+        if len(all_floats) == 1:
+            # Let's strip out the float, then see if the remaining text is small or
+            # mostly energy-like words. We'll do a quick length check:
+            without_float = re.sub(r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?", "", comment_line)
+            if len(without_float.strip()) < 15:  # arbitrary threshold
+                return True
+
+        # If more than 1 float, definitely not "just" energy
+        return False
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python molecule.py <xyz_file>")
         sys.exit(1)
-    
     
     xyz_file = sys.argv[1]
     # Example of direct parsing using the instance method
@@ -564,7 +661,7 @@ if __name__ == "__main__":
     mol.find_fragments()
     print("\n" + mol.summary())
 
-    # --- print bond matrix ---
+    # Print bond matrix
     print("\nBond matrix:")
     n = len(mol.atoms)
     header = "    " + " ".join([f"{j:>2}" for j in range(n)])
@@ -585,3 +682,9 @@ if __name__ == "__main__":
         torsion_angle = mol.dihedral(0, 1, 2, 3)
         print(f"Dihedral angle (0-1-2-3): {torsion_angle:.2f} degrees")
 
+    # Print new metadata fields
+    print("\nMetadata:")
+    print(f"  XYZ_Comment:  {mol.XYZ_Comment}")
+    print(f"  Energy:       {mol.Energy}")
+    print(f"  file_name:    {mol.file_name}")
+    print(f"  frame_number: {mol.frame_number}")
