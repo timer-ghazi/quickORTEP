@@ -108,3 +108,9 @@ VIEWER_INTERACTION = {
     # Sensitivity for mouse-driven rotation.
     "mouse_rotation_sensitivity": 0.5,
 }
+
+# ================================
+# Animation Settings
+# ================================
+ANIMATION_DELAY = 0.05  # Delay in seconds between frames during animation
+
