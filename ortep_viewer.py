@@ -9,9 +9,7 @@ Now updated to support:
   - A multi-line HUD panel displaying current state information.
   - Trajectory navigation via keys: '[' / ']' to move frame-by-frame, '{' / '}' to jump to the start/end,
     '=' and '-' to jump to the highest/lowest energy frame.
-  - Animation keys: 'a' for forward and 'A' for reverse animation, which can be toggled off.
   - Persistent selection of atoms and bonds across frames.
-  - A drawing lock to avoid thread-safety issues with Xlib.
 """
 
 import sys
@@ -22,7 +20,7 @@ from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from x11view.svg_canvas import SVGCanvas
 from ortep_renderer import ORTEP_MoleculeRenderer
 from geometry_utils import rotate_point
-from config import VIEWER_INTERACTION, ANIMATION_DELAY
+from config import VIEWER_INTERACTION
 from bond_manager import (
     cycle_existing_bond,
     cycle_atom_pair,
@@ -53,8 +51,7 @@ class MoleculeViewer(X11Window):
     - Uppercase 'B' toggles a bond: if two atoms are selected, creates or removes the bond.
     - Lowercase 'b' cycles through bond types (without removal) for a selected bond.
     - Displays a multi-line HUD panel with current state information.
-    - Trajectory Navigation: Supports frame-by-frame navigation, energy-based jumps,
-      and forward/backward animation.
+    - Trajectory Navigation: Supports frame-by-frame navigation and energy-based jumps.
     - Persistent Selection: Atom and bond selections persist across trajectory frames.
     - Uses a drawing lock to prevent thread-safety issues with Xlib.
     """
@@ -106,9 +103,6 @@ class MoleculeViewer(X11Window):
         # Persistent selection storage (by unique atom indices and bond key tuples)
         self.selected_atom_indices = []      # e.g. [1, 3, ...]
         self.selected_bond_ids = []          # e.g. [(1,2), (2,3), ...]
-
-        # Animation flag
-        self.animating = False
 
     def set_frame(self, frame_index):
         """
@@ -169,22 +163,6 @@ class MoleculeViewer(X11Window):
                 bond.selected = False
 
         self.redraw()
-
-    def animate_frames(self, direction=1):
-        """
-        Animate through frames in the given direction.
-        Uses the ANIMATION_DELAY from config.py.
-        """
-        self.animating = True
-        try:
-            while self.animating:
-                new_frame = self.current_frame + direction
-                if new_frame < 0 or new_frame >= self.total_frames:
-                    break
-                self.set_frame(new_frame)
-                time.sleep(ANIMATION_DELAY)
-        finally:
-            self.animating = False
 
     def update_info_message(self):
         """
@@ -271,9 +249,6 @@ class MoleculeViewer(X11Window):
         return None
 
     def handle_key(self, evt):
-        # Stop any ongoing animation if another key is pressed.
-        self.animating = False
-
         keysym = self.display.keycode_to_keysym(evt.detail, evt.state)
         keychar = XK.keysym_to_string(keysym)
         if keychar is None:
@@ -354,18 +329,6 @@ class MoleculeViewer(X11Window):
             if energies and any(e is not None for e in energies):
                 min_frame = min(range(len(energies)), key=lambda i: energies[i] if energies[i] is not None else float('inf'))
                 self.set_frame(min_frame)
-        elif keychar == 'a':
-            # Toggle forward animation.
-            if self.animating:
-                self.animating = False
-            else:
-                threading.Thread(target=self.animate_frames, args=(1,), daemon=True).start()
-        elif keychar == 'A':
-            # Toggle reverse animation.
-            if self.animating:
-                self.animating = False
-            else:
-                threading.Thread(target=self.animate_frames, args=(-1,), daemon=True).start()
         else:
             print(f"Ignored key: {keychar}")
 
