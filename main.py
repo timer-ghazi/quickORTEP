@@ -56,7 +56,7 @@ def main():
         ortep_mol.add_bond(nci_bond)
 
     # --- Launch the viewer with trajectory support ---
-    viewer = MoleculeViewer(ortep_mol, width=800, height=600,
+    viewer = MoleculeViewer(ortep_mol, width=700, height=700,
                               ss_factor=ss_factor, tile_size=tile_size)
     # Pass the trajectory to the viewer.
     viewer.trajectory = traj

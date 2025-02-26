@@ -9,7 +9,9 @@ Now updated to support:
   - A multi-line HUD panel displaying current state information.
   - Trajectory navigation via keys: '[' / ']' to move frame-by-frame, '{' / '}' to jump to the start/end,
     '=' and '-' to jump to the highest/lowest energy frame.
+  - Toggle display of hydrogen atoms attached to carbons via key 'd' (persistent across frames).
   - Persistent selection of atoms and bonds across frames.
+  - A drawing lock to avoid thread-safety issues with Xlib.
 """
 
 import sys
@@ -52,6 +54,7 @@ class MoleculeViewer(X11Window):
     - Lowercase 'b' cycles through bond types (without removal) for a selected bond.
     - Displays a multi-line HUD panel with current state information.
     - Trajectory Navigation: Supports frame-by-frame navigation and energy-based jumps.
+    - Toggle display of hydrogen atoms attached to carbons (key 'd').
     - Persistent Selection: Atom and bond selections persist across trajectory frames.
     - Uses a drawing lock to prevent thread-safety issues with Xlib.
     """
@@ -104,6 +107,9 @@ class MoleculeViewer(X11Window):
         self.selected_atom_indices = []      # e.g. [1, 3, ...]
         self.selected_bond_ids = []          # e.g. [(1,2), (2,3), ...]
 
+        # Hydrogen display toggle: True = show hydrogens; False = hide hydrogens attached to carbons.
+        self.show_hydrogens = True
+
     def set_frame(self, frame_index):
         """
         Update the viewer to display a new frame from the trajectory.
@@ -111,18 +117,20 @@ class MoleculeViewer(X11Window):
         
         Here we convert the molecule from the trajectory (a MoleculeWithNCIs)
         into an ORTEP_Molecule so that the atoms have the necessary attributes.
+        Additionally, if hydrogens are to be hidden, filter out hydrogen atoms
+        attached to carbons (and their corresponding bonds), then reassign atom indices.
         """
         if self.trajectory is None:
             return
 
-        # Clamp frame_index to valid range
+        # Clamp frame_index to valid range.
         frame_index = max(0, min(frame_index, self.total_frames - 1))
         self.current_frame = frame_index
         
-        # Load the new molecule from the trajectory (MoleculeWithNCIs)
+        # Load the new molecule from the trajectory (MoleculeWithNCIs).
         new_mol_nci = self.trajectory.get_frame(frame_index)
         
-        # Convert to ORTEP_Molecule
+        # Convert to ORTEP_Molecule.
         new_ortep_mol = ORTEP_Molecule()
         # Create ORTEP_Atom objects for each atom.
         for atom in new_mol_nci.atoms:
@@ -144,6 +152,30 @@ class MoleculeViewer(X11Window):
             nci_bond = NCIBond(new_ortep_mol.atoms[i], new_ortep_mol.atoms[j])
             new_ortep_mol.add_bond(nci_bond)
         
+        # --- Hydrogen Filtering ---
+        # If hydrogen atoms attached to carbons should be hidden, remove them and associated bonds.
+        if not self.show_hydrogens:
+            atoms_to_remove = []
+            bonds_to_remove = []
+            for bond in new_ortep_mol.bonds:
+                if (bond.atom1.symbol == "H" and bond.atom2.symbol == "C"):
+                    if bond.atom1 not in atoms_to_remove:
+                        atoms_to_remove.append(bond.atom1)
+                    bonds_to_remove.append(bond)
+                elif (bond.atom2.symbol == "H" and bond.atom1.symbol == "C"):
+                    if bond.atom2 not in atoms_to_remove:
+                        atoms_to_remove.append(bond.atom2)
+                    bonds_to_remove.append(bond)
+            for bond in bonds_to_remove:
+                if bond in new_ortep_mol.bonds:
+                    new_ortep_mol.bonds.remove(bond)
+            for atom in atoms_to_remove:
+                if atom in new_ortep_mol.atoms:
+                    new_ortep_mol.atoms.remove(atom)
+            # Reassign atom indices after filtering.
+            for idx, atom in enumerate(new_ortep_mol.atoms, start=1):
+                atom.index = idx
+        
         # Set the current molecule.
         self.ortep_mol = new_ortep_mol
 
@@ -154,11 +186,13 @@ class MoleculeViewer(X11Window):
             else:
                 atom.selected = False
 
-        # Reapply persistent bond selections.
+        # Reapply persistent bond selections and update the selected bonds list.
+        self.selected_bonds = []
         for bond in self.ortep_mol.bonds:
             key = (min(bond.atom1.index, bond.atom2.index), max(bond.atom1.index, bond.atom2.index))
             if key in self.selected_bond_ids:
                 bond.selected = True
+                self.selected_bonds.append(bond)
             else:
                 bond.selected = False
 
@@ -187,7 +221,7 @@ class MoleculeViewer(X11Window):
             lines.append("Click to select an atom; Shift-click to multi-select.")
         
         # Append view parameters.
-        lines.append(f"View: rx={self.view_params.rx:.1f}°, ry={self.view_params.ry:.1f}°, rz={self.view_params.rz:.1f}°")
+      #  lines.append(f"View: rx={self.view_params.rx:.1f}°, ry={self.view_params.ry:.1f}°, rz={self.view_params.rz:.1f}°")
         lines.append(f"Zoom: {self.view_params.scale:.1f}")
         
         # Trajectory Info.
@@ -195,7 +229,10 @@ class MoleculeViewer(X11Window):
         if self.trajectory and self.trajectory._frame_energies[self.current_frame] is not None:
             energy = self.trajectory._frame_energies[self.current_frame]
             lines.append(f"Energy: {energy:.4f} a.u.")
-
+        
+        # Hydrogen display status.
+        lines.append(f"Hydrogens: {'shown' if self.show_hydrogens else 'hidden'}")
+        
         self.hud_panel.update_lines(lines)
 
     def redraw(self):
@@ -284,6 +321,11 @@ class MoleculeViewer(X11Window):
             self.view_params.scale /= VIEWER_INTERACTION["key_zoom_factor"]
         elif keychar == 's':
             self.dump_svg()
+        elif keychar == 'd':
+            # Toggle hydrogen display.
+            self.show_hydrogens = not self.show_hydrogens
+            print(f"Hydrogens {'shown' if self.show_hydrogens else 'hidden'}.")
+            self.set_frame(self.current_frame)
         elif keychar == 'B':
             # Bond Toggle Logic (Uppercase B)
             if len(self.selected_atoms) == 2:
@@ -309,26 +351,33 @@ class MoleculeViewer(X11Window):
                     new_bond = cycle_existing_bond(bond, self.ortep_mol)
                     new_bonds.append(new_bond)
                 self.selected_bonds = new_bonds
-        elif keychar == '[':
-            self.set_frame(max(self.current_frame - 1, 0))
-        elif keychar == ']':
-            self.set_frame(min(self.current_frame + 1, self.total_frames - 1))
-        elif keychar == '{':
-            self.set_frame(0)
-        elif keychar == '}':
-            self.set_frame(self.total_frames - 1)
-        elif keychar == '=':
-            # Jump to the highest energy frame.
-            energies = self.trajectory._frame_energies if self.trajectory else []
-            if energies and any(e is not None for e in energies):
-                max_frame = max(range(len(energies)), key=lambda i: energies[i] if energies[i] is not None else float('-inf'))
-                self.set_frame(max_frame)
-        elif keychar == '-':
-            # Jump to the lowest energy frame.
-            energies = self.trajectory._frame_energies if self.trajectory else []
-            if energies and any(e is not None for e in energies):
-                min_frame = min(range(len(energies)), key=lambda i: energies[i] if energies[i] is not None else float('inf'))
-                self.set_frame(min_frame)
+        elif keychar in ('[', ']', '{', '}', '=', '-'):
+            # For trajectory navigation, if there's only one frame, ignore the key.
+            if self.total_frames <= 1:
+                print("Only one frame available; ignoring trajectory key press.")
+                return
+            if keychar == '[':
+                self.set_frame(max(self.current_frame - 1, 0))
+            elif keychar == ']':
+                self.set_frame(min(self.current_frame + 1, self.total_frames - 1))
+            elif keychar == '{':
+                self.set_frame(0)
+            elif keychar == '}':
+                self.set_frame(self.total_frames - 1)
+            elif keychar == '=':
+                # Jump to the highest energy frame.
+                energies = self.trajectory._frame_energies if self.trajectory else []
+                if energies and any(e is not None for e in energies):
+                    max_frame = max(range(len(energies)),
+                                    key=lambda i: energies[i] if energies[i] is not None else float('-inf'))
+                    self.set_frame(max_frame)
+            elif keychar == '-':
+                # Jump to the lowest energy frame.
+                energies = self.trajectory._frame_energies if self.trajectory else []
+                if energies and any(e is not None for e in energies):
+                    min_frame = min(range(len(energies)),
+                                    key=lambda i: energies[i] if energies[i] is not None else float('inf'))
+                    self.set_frame(min_frame)
         else:
             print(f"Ignored key: {keychar}")
 
