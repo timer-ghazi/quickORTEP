@@ -12,6 +12,7 @@ Now updated to support:
   - Toggle display of hydrogen atoms attached to carbons via key 'd' (persistent across frames).
   - Persistent selection of atoms and bonds across frames.
   - A drawing lock to avoid thread-safety issues with Xlib.
+  - A scrolling message panel at the bottom of the window for status updates.
 """
 
 import sys
@@ -31,6 +32,8 @@ from bond_manager import (
 from hud import HUDPanel
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from bonds import CovalentBond, NCIBond
+from message_service import MessageService
+from message_panel import MessagePanel
 
 class ViewParams:
     """
@@ -57,6 +60,7 @@ class MoleculeViewer(X11Window):
     - Toggle display of hydrogen atoms attached to carbons (key 'd').
     - Persistent Selection: Atom and bond selections persist across trajectory frames.
     - Uses a drawing lock to prevent thread-safety issues with Xlib.
+    - Displays status messages in a scrolling panel at the bottom of the window.
     """
     def __init__(self, ortep_molecule, width=800, height=600,
                  ss_factor=1, tile_size=128):
@@ -81,7 +85,20 @@ class MoleculeViewer(X11Window):
         self.renderer = ORTEP_MoleculeRenderer()
 
         # Instantiate the HUDPanel for displaying multi-line info.
-        self.hud_panel = HUDPanel(x=10, y_offset=20, line_spacing=20, font_size=14, color=(0, 0, 0))
+        self.hud_panel = HUDPanel(x=10, y_offset=75, line_spacing=16, font_size=14, color=(0, 0, 0))
+        
+        # Initialize message service and panel
+        self.message_service = MessageService(max_messages=3)
+        self.message_panel = MessagePanel(
+            self.message_service, 
+            x=10, 
+            y_offset=10,  # Increase bottom margin
+            line_spacing=16, 
+            font_size=12
+        )
+        
+        # Log initialization message
+        self.message_service.log_info(f"Viewer initialized ({width}x{height})")
 
         # Drawing lock to prevent concurrent Xlib calls.
         self.draw_lock = threading.Lock()
@@ -126,6 +143,14 @@ class MoleculeViewer(X11Window):
         # Clamp frame_index to valid range.
         frame_index = max(0, min(frame_index, self.total_frames - 1))
         self.current_frame = frame_index
+        
+        # Log frame change
+        energy = None
+        if self.trajectory and self.trajectory._frame_energies[self.current_frame] is not None:
+            energy = self.trajectory._frame_energies[self.current_frame]
+       #     self.message_service.log_info(f"Frame {self.current_frame}/{self.total_frames-1} (E={energy:.4f} a.u.)")
+       # else:
+       #     self.message_service.log_info(f"Frame {self.current_frame}/{self.total_frames-1}")
         
         # Load the new molecule from the trajectory (MoleculeWithNCIs).
         new_mol_nci = self.trajectory.get_frame(frame_index)
@@ -245,6 +270,7 @@ class MoleculeViewer(X11Window):
             self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
             self.update_info_message()
             self.hud_panel.draw(self.canvas)
+            self.message_panel.draw(self.canvas)
             self.canvas.flush()
 
     def fit_molecule_to_window(self):
@@ -272,6 +298,7 @@ class MoleculeViewer(X11Window):
         center_y = (min_y + max_y) / 2.0
         self.view_params.x_offset = self.canvas.width / 2 - center_x * self.view_params.scale
         self.view_params.y_offset = self.canvas.height / 2 - center_y * self.view_params.scale
+        self.message_service.log_info(f"Molecule fitted to window (scale: {new_scale:.1f})")
         self.redraw()
 
     def hit_test(self, x, y):
@@ -292,7 +319,7 @@ class MoleculeViewer(X11Window):
             return
 
         if keychar in ("q", "Escape"):
-            print("Quitting.")
+            self.message_service.log_info("Quitting.")
             self.running = False
             sys.exit(0)
         elif keychar == 'h':
@@ -317,14 +344,17 @@ class MoleculeViewer(X11Window):
             self.view_params.y_offset += VIEWER_INTERACTION["pan_increment"]
         elif keychar == 'n':
             self.view_params.scale *= VIEWER_INTERACTION["key_zoom_factor"]
+            self.message_service.log_info(f"Zoomed in (scale: {self.view_params.scale:.1f})")
         elif keychar == 'm':
             self.view_params.scale /= VIEWER_INTERACTION["key_zoom_factor"]
+            self.message_service.log_info(f"Zoomed out (scale: {self.view_params.scale:.1f})")
         elif keychar == 's':
             self.dump_svg()
         elif keychar == 'd':
             # Toggle hydrogen display.
             self.show_hydrogens = not self.show_hydrogens
-            print(f"Hydrogens {'shown' if self.show_hydrogens else 'hidden'}.")
+            status = "shown" if self.show_hydrogens else "hidden"
+            self.message_service.log_info(f"Hydrogens {status}")
             self.set_frame(self.current_frame)
         elif keychar == 'B':
             # Bond Toggle Logic (Uppercase B)
@@ -339,22 +369,28 @@ class MoleculeViewer(X11Window):
                     self.selected_bonds = [toggled]
                     self.selected_bond_ids = [(min(toggled.atom1.index, toggled.atom2.index),
                                                  max(toggled.atom1.index, toggled.atom2.index))]
+                    self.message_service.log_info(f"Created bond between {atom1.symbol}{atom1.index} and {atom2.symbol}{atom2.index}")
                 else:
                     self.selected_atoms = []
                     self.selected_bonds = []
                     self.selected_bond_ids = []
+                    self.message_service.log_info(f"Removed bond between {atom1.symbol}{atom1.index} and {atom2.symbol}{atom2.index}")
         elif keychar == 'b':
             # Bond Cycling Logic (Lowercase b)
             if self.selected_bonds:
                 new_bonds = []
                 for bond in self.selected_bonds:
+                    atom1, atom2 = bond.atom1, bond.atom2
+                    old_type = type(bond).__name__.replace("Bond", "")
                     new_bond = cycle_existing_bond(bond, self.ortep_mol)
                     new_bonds.append(new_bond)
+                    new_type = type(new_bond).__name__.replace("Bond", "")
+                    self.message_service.log_info(f"Changed bond {atom1.symbol}{atom1.index}-{atom2.symbol}{atom2.index} from {old_type} to {new_type}")
                 self.selected_bonds = new_bonds
         elif keychar in ('[', ']', '{', '}', '=', '-'):
             # For trajectory navigation, if there's only one frame, ignore the key.
             if self.total_frames <= 1:
-                print("Only one frame available; ignoring trajectory key press.")
+                self.message_service.log_info("Only one frame available; ignoring trajectory key press.")
                 return
             if keychar == '[':
                 self.set_frame(max(self.current_frame - 1, 0))
@@ -362,8 +398,10 @@ class MoleculeViewer(X11Window):
                 self.set_frame(min(self.current_frame + 1, self.total_frames - 1))
             elif keychar == '{':
                 self.set_frame(0)
+                self.message_service.log_info("First frame")
             elif keychar == '}':
                 self.set_frame(self.total_frames - 1)
+                self.message_service.log_info("Last frame")
             elif keychar == '=':
                 # Jump to the highest energy frame.
                 energies = self.trajectory._frame_energies if self.trajectory else []
@@ -371,6 +409,7 @@ class MoleculeViewer(X11Window):
                     max_frame = max(range(len(energies)),
                                     key=lambda i: energies[i] if energies[i] is not None else float('-inf'))
                     self.set_frame(max_frame)
+                    self.message_service.log_info(f"Highest energy frame (E={energies[max_frame]:.4f} a.u.)")
             elif keychar == '-':
                 # Jump to the lowest energy frame.
                 energies = self.trajectory._frame_energies if self.trajectory else []
@@ -378,8 +417,7 @@ class MoleculeViewer(X11Window):
                     min_frame = min(range(len(energies)),
                                     key=lambda i: energies[i] if energies[i] is not None else float('inf'))
                     self.set_frame(min_frame)
-        else:
-            print(f"Ignored key: {keychar}")
+                    self.message_service.log_info(f"Lowest energy frame (E={energies[min_frame]:.4f} a.u.)")
 
         self.redraw()
 
@@ -447,6 +485,7 @@ class MoleculeViewer(X11Window):
                     self.selected_bonds = []
                     self.selected_atom_indices = []
                     self.selected_bond_ids = []
+                    # self.message_service.log_info("Selection cleared")
                 else:
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
                         for bond in self.selected_bonds:
@@ -459,17 +498,20 @@ class MoleculeViewer(X11Window):
                                 self.selected_atoms.remove(underlying_atom)
                                 if underlying_atom.index in self.selected_atom_indices:
                                     self.selected_atom_indices.remove(underlying_atom.index)
+                                self.message_service.log_info(f"Deselected {underlying_atom.symbol}{underlying_atom.index}")
                             else:
                                 underlying_atom.selected = True
                                 self.selected_atoms.append(underlying_atom)
                                 if underlying_atom.index not in self.selected_atom_indices:
                                     self.selected_atom_indices.append(underlying_atom.index)
+                                self.message_service.log_info(f"Added {underlying_atom.symbol}{underlying_atom.index} to selection")
                         else:
                             for atom in self.selected_atoms:
                                 atom.selected = False
                             self.selected_atoms = [underlying_atom]
                             underlying_atom.selected = True
                             self.selected_atom_indices = [underlying_atom.index]
+                            self.message_service.log_info(f"Selected {underlying_atom.symbol}{underlying_atom.index}")
                     elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
                         for atom in self.selected_atoms:
                             atom.selected = False
@@ -483,6 +525,7 @@ class MoleculeViewer(X11Window):
                                        max(underlying_bond.atom1.index, underlying_bond.atom2.index))
                                 if key in self.selected_bond_ids:
                                     self.selected_bond_ids.remove(key)
+                                self.message_service.log_info(f"Deselected bond {underlying_bond.atom1.symbol}{underlying_bond.atom1.index}-{underlying_bond.atom2.symbol}{underlying_bond.atom2.index}")
                             else:
                                 underlying_bond.selected = True
                                 self.selected_bonds.append(underlying_bond)
@@ -490,6 +533,7 @@ class MoleculeViewer(X11Window):
                                        max(underlying_bond.atom1.index, underlying_bond.atom2.index))
                                 if key not in self.selected_bond_ids:
                                     self.selected_bond_ids.append(key)
+                                self.message_service.log_info(f"Added bond {underlying_bond.atom1.symbol}{underlying_bond.atom1.index}-{underlying_bond.atom2.symbol}{underlying_bond.atom2.index} to selection")
                         else:
                             for bond in self.selected_bonds:
                                 bond.selected = False
@@ -497,6 +541,7 @@ class MoleculeViewer(X11Window):
                             underlying_bond.selected = True
                             self.selected_bond_ids = [(min(underlying_bond.atom1.index, underlying_bond.atom2.index),
                                                        max(underlying_bond.atom1.index, underlying_bond.atom2.index))]
+                            self.message_service.log_info(f"Selected bond {underlying_bond.atom1.symbol}{underlying_bond.atom1.index}-{underlying_bond.atom2.symbol}{underlying_bond.atom2.index}")
                     else:
                         for atom in self.selected_atoms:
                             atom.selected = False
@@ -506,6 +551,7 @@ class MoleculeViewer(X11Window):
                         self.selected_bonds = []
                         self.selected_atom_indices = []
                         self.selected_bond_ids = []
+                        # self.message_service.log_info("Selection cleared")
                 self.redraw()
         self.active_button = None
 
@@ -516,7 +562,7 @@ class MoleculeViewer(X11Window):
         self.view_params.as_float = False
         filename = "quickORTEP_export.svg"
         svg_canvas.flush(filename)
-        print(f"SVG export saved to {filename}")
+        self.message_service.log_info(f"SVG export saved to {filename}")
 
     def reset_view(self):
         self.view_params.rx = 0.0
@@ -525,4 +571,5 @@ class MoleculeViewer(X11Window):
         self.view_params.scale = 100.0
         self.view_params.x_offset = self.canvas.width // 2
         self.view_params.y_offset = self.canvas.height // 2
+        self.message_service.log_info("View reset to default")
         self.redraw()

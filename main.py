@@ -10,6 +10,8 @@ which now includes a multi-line HUD for displaying interactive information and t
 """
 
 import sys
+import os
+import numpy as np
 from molecule_nci import MoleculeWithNCIs
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from bonds import CovalentBond, NCIBond
@@ -43,17 +45,21 @@ def main():
     # Convert the bond matrix to bonds using the CovalentBond class.
     n_atoms = len(mol_nci.atoms)
     bondmat = getattr(mol_nci, "bond_matrix", None)
+    n_bonds = 0
     if bondmat is not None:
         for i in range(n_atoms):
             for j in range(i + 1, n_atoms):
                 if bondmat[i, j] == 1:
                     b = CovalentBond(ortep_mol.atoms[i], ortep_mol.atoms[j])
                     ortep_mol.add_bond(b)
+                    n_bonds += 1
 
     # Add non-covalent interactions.
+    n_ncis = 0
     for (i, j), interactions in mol_nci.ncis.items():
         nci_bond = NCIBond(ortep_mol.atoms[i], ortep_mol.atoms[j])
         ortep_mol.add_bond(nci_bond)
+        n_ncis += 1
 
     # --- Launch the viewer with trajectory support ---
     viewer = MoleculeViewer(ortep_mol, width=700, height=700,
@@ -62,6 +68,28 @@ def main():
     viewer.trajectory = traj
     viewer.current_frame = 0
     viewer.total_frames = len(traj._raw_frames)
+    
+    # Log molecule and trajectory information
+    filename = os.path.basename(xyz_file)
+    viewer.message_service.log_info(f"Loaded {filename} with {n_atoms} atoms")
+    viewer.message_service.log_info(f"Found {n_bonds} covalent bonds and {n_ncis} non-covalent interactions")
+    
+    # Log trajectory information
+    if viewer.total_frames > 1:
+        viewer.message_service.log_info(f"Trajectory contains {viewer.total_frames} frames")
+        
+        # Calculate energy statistics if available
+        energies = [e for e in traj._frame_energies if e is not None]
+        if energies:
+            min_e = min(energies)
+            max_e = max(energies)
+            min_idx = traj._frame_energies.index(min_e)
+            max_idx = traj._frame_energies.index(max_e)
+            viewer.message_service.log_info(f"Energy range: {min_e:.4f} (frame {min_idx}) to {max_e:.4f} a.u. (frame {max_idx})")
+    
+    # Log rendering settings
+    if ss_factor > 1:
+        viewer.message_service.log_info(f"Anti-aliasing enabled (factor: {ss_factor}, tile size: {tile_size})")
     
     viewer.fit_molecule_to_window()  # Adjust zoom and centering so the molecule fits
     viewer.run()
