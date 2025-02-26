@@ -24,7 +24,7 @@ class Trajectory:
         """
         self._raw_frames = raw_frames              # List of raw frame data (each a list of lines)
         self._molecule_cache = {}                  # Cache: frame_index -> MoleculeWithNCIs instance
-        self._frame_energies = [None] * len(raw_frames)  # Will be filled on first full processing
+        self._frame_energies = [None] * len(raw_frames)  # Will be filled on processing
 
     @classmethod
     def from_xyz_file(cls, file_name):
@@ -33,7 +33,8 @@ class Trajectory:
         The file can contain one or multiple concatenated XYZ frames.
 
         This method splits the file into frames and stores each raw frame.
-        Energy extraction (and full parsing) is deferred until needed.
+        Energy extraction (and full parsing) is deferred until needed,
+        but here we preload all energies so that "=" and "-" keys work properly.
 
         Parameters:
             file_name (str): Path to the XYZ file.
@@ -73,7 +74,11 @@ class Trajectory:
             frames.append(frame_data)
             i = frame_end
 
-        return cls(raw_frames=frames)
+        traj = cls(raw_frames=frames)
+        # Preload energies for all frames so that "=" and "-" keys work properly.
+        for i in range(len(frames)):
+            traj.get_frame(i)
+        return traj
 
     def is_single_structure(self):
         """
@@ -97,7 +102,7 @@ class Trajectory:
             # Create the molecule using the robust parsing provided by read_xyz_data()
             mol = MoleculeWithNCIs.from_xyz_data(data=raw_data, frame_number=frame_index)
             # Run the expensive processing steps
-            mol.to_standard_orientation()
+         # qt   mol.to_standard_orientation()
             mol.detect_bonds()
             mol.find_fragments()
             mol.detect_all_ncis()
