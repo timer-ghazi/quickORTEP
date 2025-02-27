@@ -14,10 +14,11 @@ from Xlib import XK, X
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from hud import HUDPanel
 from ortep_renderer import ORTEP_MoleculeRenderer
-from config import VIEWER_INTERACTION
+from config import VIEWER_INTERACTION, MINIMAL_THEME
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from message_service import MessageService
 from message_panel import MessagePanel
+from graph_viewer import GraphViewer
 
 # Import our helper modules.
 from selection_manager import _SelectionManager
@@ -90,6 +91,9 @@ class MoleculeViewer(X11Window):
         self.trajectory = None
         self.current_frame = 0
         self.total_frames = 1
+        
+        # Energy graph for trajectory visualization
+        self.energy_graph = None
 
         self.show_hydrogens = True
 
@@ -105,6 +109,54 @@ class MoleculeViewer(X11Window):
         self.trajectory = trajectory
         self.total_frames = len(trajectory._raw_frames)
         self._traj_manager = _TrajectoryManager(trajectory)
+        
+        # Reset the energy graph so it will be recreated with the new trajectory data
+        self.energy_graph = None
+
+    def ensure_energy_graph(self):
+        """
+        Initialize the energy vs. frame graph if a trajectory with energy data is available.
+        """
+        # Skip if graph already exists or no trajectory is available
+        if self.energy_graph is not None or self.trajectory is None:
+            return
+        
+        # Check for energy data
+        energies = self.trajectory._frame_energies
+        if not energies or all(e is None for e in energies):
+            return
+        
+        # Prepare graph data
+        x_values = list(range(len(energies)))
+        y_values = [e if e is not None else 0.0 for e in energies]
+        
+        # Configure graph position in bottom right corner
+        thumb_width = 150
+        thumb_height = 80
+        thumb_margin = 20
+        thumb_x = self.canvas.width - thumb_width - thumb_margin
+        thumb_y = self.canvas.height - thumb_height - thumb_margin
+        
+        # Create a custom minimal theme
+        custom_minimal_theme = MINIMAL_THEME.copy()
+        custom_minimal_theme["margin"] = {"left": 10, "right": 10, "top": 10, "bottom": 10}
+        
+        # Create the graph
+        self.energy_graph = GraphViewer(
+            canvas=self.canvas,
+            xdata=x_values,
+            ydata=y_values,
+            mode="minimal",
+            current_frame=self.current_frame,
+            region_x=thumb_x,
+            region_y=thumb_y,
+            region_width=thumb_width,
+            region_height=thumb_height,
+            x_axis_title="",
+            y_axis_title="",
+            title="Energy",
+            theme=custom_minimal_theme
+        )
 
     def set_frame(self, frame_index):
         if self.trajectory is None:
@@ -112,6 +164,10 @@ class MoleculeViewer(X11Window):
         # Delegate frame conversion to the trajectory manager.
         self.current_frame = frame_index
         self.ortep_mol = self._traj_manager.convert_frame(frame_index, self.show_hydrogens)
+
+        # Update the energy graph if it exists
+        if self.energy_graph is not None:
+            self.energy_graph.update_current_frame(frame_index)
 
         # Reapply persistent selection.
         for atom in self.ortep_mol.atoms:
@@ -155,6 +211,14 @@ class MoleculeViewer(X11Window):
         with self.draw_lock:
             self.canvas.clear()
             self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
+            
+            # Ensure the energy graph is initialized if needed
+            self.ensure_energy_graph()
+            
+            # Draw the energy graph if it exists
+            if self.energy_graph is not None:
+                self.energy_graph.draw_graph()
+                
             self.update_info_message()
             self.hud_panel.draw(self.canvas)
             self.message_panel.draw(self.canvas)

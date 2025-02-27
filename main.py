@@ -65,9 +65,13 @@ def main():
     viewer = MoleculeViewer(ortep_mol, width=700, height=700,
                               ss_factor=ss_factor, tile_size=tile_size)
     # Pass the trajectory to the viewer.
-    viewer.trajectory = traj
-    viewer.current_frame = 0
-    viewer.total_frames = len(traj._raw_frames)
+    # viewer.trajectory = traj
+    # viewer.current_frame = 0
+    # viewer.total_frames = len(traj._raw_frames)
+
+    # Pass the trajectory to the viewer using the proper method
+    viewer.set_trajectory(traj)
+    viewer.current_frame = 0  # This might be redundant now since set_trajectory sets total_frames
     
     # Log molecule and trajectory information
     filename = os.path.basename(xyz_file)

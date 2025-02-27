@@ -8,6 +8,7 @@ Refactored graph_viewer.py
 - Merges offset calculations with theme logic.
 - Simplifies the test harness.
 - Allows a custom theme to be passed in so you don't need to override after construction.
+- Adds an update_data() method for swapping xdata/ydata on the fly.
 """
 
 import sys
@@ -354,6 +355,40 @@ class GraphViewer:
     def update_current_frame(self, new_frame):
         """Update the current frame and redraw."""
         self.current_frame = new_frame
+        self.draw_graph()
+
+    def update_data(self, xdata, ydata, x_axis_title=None, y_axis_title=None, title=None):
+        """
+        Replace the current x and y data with new data, optionally update axis
+        labels and/or the plot title, then redraw. This is useful for switching 
+        from one data set (e.g., Energy vs. Frame) to another (Distance vs. Frame)
+        without creating a new GraphViewer instance.
+
+        Parameters:
+            xdata, ydata: New lists of x and y values
+            x_axis_title: Optional new X-axis label
+            y_axis_title: Optional new Y-axis label
+            title: Optional new graph title
+        """
+        self.xdata = xdata
+        self.ydata = ydata
+
+        self.xmin = min(xdata)
+        self.xmax = max(xdata)
+        self.ymin = min(ydata)
+        self.ymax = max(ydata)
+
+        if x_axis_title is not None:
+            self.x_axis_title = x_axis_title
+        if y_axis_title is not None:
+            self.y_axis_title = y_axis_title
+        if title is not None:
+            self.title = title
+
+        # Recompute margins & offsets in case the new data range is very different
+        self._apply_theme_offsets()
+
+        # Redraw with the new data
         self.draw_graph()
 
 
