@@ -77,12 +77,24 @@ class _EventHandler:
             status = "shown" if self.viewer.show_hydrogens else "hidden"
             self.viewer.message_service.log_info(f"Hydrogens {status}")
             self.viewer.set_frame(self.viewer.current_frame)
+        elif keychar == 'p':
+            # Toggle bond propagation
+            enabled = self.viewer.bond_edit_tracker.toggle()
+            status = "enabled" if enabled else "disabled"
+            self.viewer.message_service.log_info(f"Bond propagation {status}")
+            # Re-apply current frame to reflect the change
+            self.viewer.set_frame(self.viewer.current_frame)
         elif keychar == 'B':
             # Bond Toggle Logic (Uppercase B)
             if len(self.viewer.selected_atoms) == 2:
                 atom1, atom2 = self.viewer.selected_atoms
                 toggled = toggle_bond(atom1, atom2, self.viewer.ortep_mol)
+                
+                # Record the edit in the bond tracker
                 if toggled:
+                    self.viewer.bond_edit_tracker.add_bond(
+                        atom1.index, atom2.index, type(toggled))
+                    
                     for a in self.viewer.selected_atoms:
                         a.selected = False
                     self.viewer.selected_atoms = []
@@ -96,6 +108,9 @@ class _EventHandler:
                         f"Created bond between {atom1.symbol}{atom1.index} and {atom2.symbol}{atom2.index}"
                     )
                 else:
+                    self.viewer.bond_edit_tracker.remove_bond(
+                        atom1.index, atom2.index)
+                    
                     self.viewer.selected_atoms = []
                     self.viewer.selected_bonds = []
                     self.viewer.selected_bond_ids = []
@@ -110,6 +125,11 @@ class _EventHandler:
                     atom1, atom2 = bond.atom1, bond.atom2
                     old_type = type(bond).__name__.replace("Bond", "")
                     new_bond = cycle_existing_bond(bond, self.viewer.ortep_mol)
+                    
+                    # Record the edit in the bond tracker
+                    self.viewer.bond_edit_tracker.change_bond_type(
+                        atom1.index, atom2.index, type(new_bond))
+                    
                     new_bonds.append(new_bond)
                     new_type = type(new_bond).__name__.replace("Bond", "")
                     self.viewer.message_service.log_info(
@@ -283,8 +303,8 @@ class _EventHandler:
                             else:
                                 underlying_bond.selected = True
                                 self.viewer.selected_bonds.append(underlying_bond)
-                                key = (min(underlying_bond.atom1.index, underlying_bond.atom2.index),
-                                       max(underlying_bond.atom1.index, underlying_bond.atom2.index))
+                                key = (min(underlying_bond.atom1.index, underlying_bond.atom1.index),
+                                       max(underlying_bond.atom2.index, underlying_bond.atom2.index))
                                 if key not in self.viewer.selected_bond_ids:
                                     self.viewer.selected_bond_ids.append(key)
                                 self.viewer.message_service.log_info(

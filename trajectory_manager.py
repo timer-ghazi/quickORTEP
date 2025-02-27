@@ -10,6 +10,7 @@ It handles:
   - Rebuilding bonds from a bond matrix (if available).
   - Adding non-covalent interactions.
   - Optionally filtering out hydrogen atoms attached to carbons.
+  - Applying user-defined bond edits from BondEditTracker.
 """
 
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
@@ -25,13 +26,14 @@ class _TrajectoryManager:
         """
         self.trajectory = trajectory
 
-    def convert_frame(self, frame_index, show_hydrogens=True):
+    def convert_frame(self, frame_index, show_hydrogens=True, bond_edit_tracker=None):
         """
         Convert a trajectory frame into an ORTEP_Molecule.
         
         Parameters:
             frame_index (int): The index of the frame to convert.
             show_hydrogens (bool): Whether to include hydrogen atoms attached to carbons.
+            bond_edit_tracker (BondEditTracker): Optional tracker to apply bond edits.
         
         Returns:
             new_ortep_mol (ORTEP_Molecule): The molecule converted from the trajectory frame.
@@ -67,6 +69,10 @@ class _TrajectoryManager:
         # Apply hydrogen filtering if requested.
         if not show_hydrogens:
             self._apply_hydrogen_filter(new_ortep_mol)
+
+        # Apply user bond edits if provided
+        if bond_edit_tracker:
+            bond_edit_tracker.apply_edits(new_ortep_mol)
 
         return new_ortep_mol
 

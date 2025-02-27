@@ -5,6 +5,7 @@ ortep_viewer.py
 The MoleculeViewer class manages an ORTEP_Molecule, its rendering,
 and handles user events. It now delegates trajectory conversion,
 selection, event handling, and export functionality to helper modules.
+It also supports bond propagation across trajectory frames.
 """
 
 import sys
@@ -19,6 +20,7 @@ from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from message_service import MessageService
 from message_panel import MessagePanel
 from graph_viewer import GraphViewer
+from bond_edit_tracker import BondEditTracker
 
 # Import our helper modules.
 from selection_manager import _SelectionManager
@@ -106,6 +108,9 @@ class MoleculeViewer(X11Window):
         self._event_handler = _EventHandler(self)
         self._traj_manager = None  # Will be set when a trajectory is assigned.
 
+        # Initialize bond edit tracker for propagating bond changes across frames
+        self.bond_edit_tracker = BondEditTracker()
+
     def set_trajectory(self, trajectory):
         """
         Set the trajectory and initialize the trajectory manager.
@@ -169,11 +174,19 @@ class MoleculeViewer(X11Window):
             self.energy_graph.region_y = thumb_y
 
     def set_frame(self, frame_index):
+        """
+        Set the current frame and apply bond edits if bond propagation is enabled.
+        """
         if self.trajectory is None:
             return
-        # Delegate frame conversion to the trajectory manager.
+            
+        # Delegate frame conversion to the trajectory manager with bond edits
         self.current_frame = frame_index
-        self.ortep_mol = self._traj_manager.convert_frame(frame_index, self.show_hydrogens)
+        self.ortep_mol = self._traj_manager.convert_frame(
+            frame_index, 
+            self.show_hydrogens,
+            bond_edit_tracker=self.bond_edit_tracker
+        )
 
         # Update the energy graph if it exists
         if self.energy_graph is not None:
@@ -194,6 +207,9 @@ class MoleculeViewer(X11Window):
         self.redraw()
 
     def update_info_message(self):
+        """
+        Update the HUD with current info, including bond propagation status.
+        """
         lines = []
         if self.selected_bonds:
             b = self.selected_bonds[0]
@@ -215,7 +231,24 @@ class MoleculeViewer(X11Window):
             energy = self.trajectory._frame_energies[self.current_frame]
             lines.append(f"Energy: {energy:.4f} a.u.")
         lines.append(f"Hydrogens: {'shown' if self.show_hydrogens else 'hidden'}")
+        
+        # Add bond propagation status
+        prop_status = "enabled" if self.bond_edit_tracker.enabled else "disabled"
+        edit_count = self.bond_edit_tracker.get_edit_count()
+        if edit_count > 0:
+            lines.append(f"Bond propagation: {prop_status} ({edit_count} edits)")
+        else:
+            lines.append(f"Bond propagation: {prop_status}")
+            
         self.hud_panel.update_lines(lines)
+
+    def clear_bond_edits(self):
+        """
+        Clear all bond edits and refresh the current frame.
+        """
+        self.bond_edit_tracker.clear_edits()
+        self.message_service.log_info("Cleared all bond edits")
+        self.set_frame(self.current_frame)
 
     def redraw(self):
         with self.draw_lock:
