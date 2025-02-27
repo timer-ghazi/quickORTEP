@@ -3,7 +3,6 @@
 graph_viewer.py
 ===============
 
-Revised to avoid label overlap on the y-axis by properly positioning labels and titles.
 """
 
 import sys
@@ -14,7 +13,7 @@ from config import MINIMAL_THEME, FULL_THEME
 class GraphViewer:
     def __init__(self, canvas, xdata, ydata, mode="minimal", current_frame=0,
                  region_x=0, region_y=0, region_width=None, region_height=None,
-                 x_axis_title="Frame", y_axis_title="Energy"):
+                 x_axis_title="Frame", y_axis_title="Energy", title=None):
         """
         Initialize the graph viewer with given data and configuration.
         
@@ -27,12 +26,14 @@ class GraphViewer:
             region_x, region_y: Top-left corner of graph region
             region_width, region_height: Size of graph region
             x_axis_title, y_axis_title: Titles for the axes
+            title: Optional title to display above the graph
         """
         self.canvas = canvas
         self.xdata = xdata
         self.ydata = ydata
         self.mode = mode
         self.current_frame = current_frame
+        self.title = title
 
         # Region defaults to full canvas if not provided.
         self.region_x = region_x
@@ -142,6 +143,30 @@ class GraphViewer:
         reg_x, reg_y = self.region_x, self.region_y
         reg_w, reg_h = self.region_width, self.region_height
         L, R, T, B = self.left_margin, self.right_margin, self.top_margin, self.bottom_margin
+
+        # Draw the title if provided
+        if self.title:
+            # Calculate center position for the title
+            title_x = reg_x + L + (reg_w - L - R) // 2
+            
+            # Adjust y position and font size based on mode
+            if self.mode == "minimal":
+                # For minimal mode, position just above the graph with smaller font
+                title_y = reg_y + 5  # Small offset from top
+                font_size = max(8, self.theme.get("font_size", 10) - 2)  # Smaller font, minimum 8px
+            else:
+                # For full mode, position further above with standard font
+                title_y = reg_y - 5  # Above the graph region
+                font_size = self.theme.get("font_size", 12)
+            
+            # Calculate approximate title width for centering
+            title_width = len(self.title) * (font_size // 2)  # Rough estimate
+            
+            # Draw the title centered
+            self.canvas.draw_text(title_x - (title_width // 2), title_y,
+                                  text=self.title,
+                                  color=self.theme["font_color"],
+                                  font_size=font_size)
 
         # X axis line at bottom
         x_axis_y = reg_y + reg_h - B
@@ -344,14 +369,16 @@ if __name__ == "__main__":
         region_width=main_width,
         region_height=main_height,
         x_axis_title="Frame",
-        y_axis_title="Energy (a.u.)"
+        y_axis_title="Energy (a.u.)",
+        title="Energy Profile"
     )
 
     # Create the thumbnail in the lower right corner (minimal mode)
-    thumb_size = 100
+    thumb_width = 150  # Wider thumbnail for better x-axis visibility
+    thumb_height = 80  # Shorter height
     thumb_margin = 20
-    thumb_x = win.canvas.width - thumb_size - thumb_margin
-    thumb_y = win.canvas.height - thumb_size - thumb_margin
+    thumb_x = win.canvas.width - thumb_width - thumb_margin
+    thumb_y = win.canvas.height - thumb_height - thumb_margin
     
     # For minimal mode, use smaller margins
     minimal_theme = MINIMAL_THEME.copy()
@@ -365,10 +392,11 @@ if __name__ == "__main__":
         current_frame=current_frame,
         region_x=thumb_x,
         region_y=thumb_y,
-        region_width=thumb_size,
-        region_height=thumb_size,
+        region_width=thumb_width,
+        region_height=thumb_height,
         x_axis_title="",
-        y_axis_title=""
+        y_axis_title="",
+        title="Energy"
     )
     # Override the theme with smaller margins
     thumbnail_graph.theme = minimal_theme
