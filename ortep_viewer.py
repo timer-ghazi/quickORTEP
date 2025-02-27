@@ -52,6 +52,10 @@ class MoleculeViewer(X11Window):
             title="ORTEP Style Molecule (Refactored)",
             canvas_class=canvas_class
         )
+        
+        # Store initial canvas dimensions to detect resizing
+        self._last_canvas_width = width
+        self._last_canvas_height = height
 
         self.ortep_mol = ortep_molecule
         self.view_params = ViewParams(
@@ -115,21 +119,9 @@ class MoleculeViewer(X11Window):
 
     def ensure_energy_graph(self):
         """
-        Initialize the energy vs. frame graph if a trajectory with energy data is available.
+        Initialize the energy vs. frame graph if a trajectory with energy data is available,
+        or update its position if already created.
         """
-        # Skip if graph already exists or no trajectory is available
-        if self.energy_graph is not None or self.trajectory is None:
-            return
-        
-        # Check for energy data
-        energies = self.trajectory._frame_energies
-        if not energies or all(e is None for e in energies):
-            return
-        
-        # Prepare graph data
-        x_values = list(range(len(energies)))
-        y_values = [e if e is not None else 0.0 for e in energies]
-        
         # Configure graph position in bottom right corner
         thumb_width = 150
         thumb_height = 80
@@ -137,26 +129,44 @@ class MoleculeViewer(X11Window):
         thumb_x = self.canvas.width - thumb_width - thumb_margin
         thumb_y = self.canvas.height - thumb_height - thumb_margin
         
-        # Create a custom minimal theme
-        custom_minimal_theme = MINIMAL_THEME.copy()
-        custom_minimal_theme["margin"] = {"left": 10, "right": 10, "top": 10, "bottom": 10}
-        
-        # Create the graph
-        self.energy_graph = GraphViewer(
-            canvas=self.canvas,
-            xdata=x_values,
-            ydata=y_values,
-            mode="minimal",
-            current_frame=self.current_frame,
-            region_x=thumb_x,
-            region_y=thumb_y,
-            region_width=thumb_width,
-            region_height=thumb_height,
-            x_axis_title="",
-            y_axis_title="",
-            title="Energy",
-            theme=custom_minimal_theme
-        )
+        if self.energy_graph is None:
+            # Skip if no trajectory is available
+            if self.trajectory is None:
+                return
+            
+            # Check for energy data
+            energies = self.trajectory._frame_energies
+            if not energies or all(e is None for e in energies):
+                return
+            
+            # Prepare graph data
+            x_values = list(range(len(energies)))
+            y_values = [e if e is not None else 0.0 for e in energies]
+            
+            # Create a custom minimal theme
+            custom_minimal_theme = MINIMAL_THEME.copy()
+            custom_minimal_theme["margin"] = {"left": 10, "right": 10, "top": 10, "bottom": 10}
+            
+            # Create the graph
+            self.energy_graph = GraphViewer(
+                canvas=self.canvas,
+                xdata=x_values,
+                ydata=y_values,
+                mode="minimal",
+                current_frame=self.current_frame,
+                region_x=thumb_x,
+                region_y=thumb_y,
+                region_width=thumb_width,
+                region_height=thumb_height,
+                x_axis_title="",
+                y_axis_title="",
+                title="Energy",
+                theme=custom_minimal_theme
+            )
+        else:
+            # Update existing graph position to maintain bottom-right corner placement
+            self.energy_graph.region_x = thumb_x
+            self.energy_graph.region_y = thumb_y
 
     def set_frame(self, frame_index):
         if self.trajectory is None:
@@ -209,10 +219,20 @@ class MoleculeViewer(X11Window):
 
     def redraw(self):
         with self.draw_lock:
+            # Check if window has been resized
+            if self._last_canvas_width != self.canvas.width or self._last_canvas_height != self.canvas.height:
+                # Window was resized, update stored dimensions
+                self._last_canvas_width = self.canvas.width
+                self._last_canvas_height = self.canvas.height
+                # Make sure graph position is updated on next ensure_energy_graph call
+                if self.energy_graph is not None:
+                    # We'll update the position when ensure_energy_graph is called
+                    pass
+            
             self.canvas.clear()
             self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
             
-            # Ensure the energy graph is initialized if needed
+            # Ensure the energy graph is initialized if needed and positioned correctly
             self.ensure_energy_graph()
             
             # Draw the energy graph if it exists
