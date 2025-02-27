@@ -24,7 +24,7 @@ class MessageService:
         # Define message types with their corresponding prefixes and colors
         self.message_types = {
             "info": {
-                "prefix": "INFO",
+                "prefix": "",
                 "color": (0, 0, 0),  # Black
             },
             "warning": {
@@ -45,7 +45,8 @@ class MessageService:
           - message_type (str): Type of message ('info', 'warning', 'error')
           - message (str): The message text
         """
-        timestamp = time.strftime("%H:%M:%S")
+        timestamp = time.strftime("%H:%M")
+        # timestamp = time.strftime("%H:%M:%S")
         
         # Add the new message to the end of the list
         self.messages.append((timestamp, message_type, message))
@@ -62,7 +63,7 @@ class MessageService:
           - message (str): The information message to log
         """
         self._add_message("info", message)
-        print(f"INFO: {message}")
+        print(f" {message}")
     
     def log_warning(self, message):
         """

@@ -109,3 +109,50 @@ VIEWER_INTERACTION = {
     "mouse_rotation_sensitivity": 0.5,
 }
 
+# graph theme
+
+MINIMAL_THEME = {
+    "background_color": (255, 255, 255),
+    "axis_color": (0, 0, 0),
+    "tick_color": (0, 0, 0),
+    "data_line_color": (255, 0, 0),
+    "indicator_color": (0, 0, 255),
+    "font_color": (0, 0, 0),
+    "font_size": 12,
+    "tick_length": 5,
+    "line_thickness": {
+        "axis": 2,
+        "data": 2,
+        "tick": 2,
+        "indicator": 1,
+    },
+    "margin": {
+         "left": 30,
+         "right": 10,
+         "top": 10,
+         "bottom": 20
+    }
+}
+
+FULL_THEME = {
+    "background_color": (255, 255, 255),
+    "axis_color": (0, 0, 0),
+    "tick_color": (0, 0, 0),
+    "data_line_color": (255, 0, 0),
+    "indicator_color": (0, 0, 255),
+    "font_color": (0, 0, 0),
+    "font_size": 12,
+    "tick_length": 5,
+    "line_thickness": {
+        "axis": 2,
+        "data": 2,
+        "tick": 2,
+        "indicator": 1,
+    },
+    "margin": {
+         "left": 50,
+         "right": 20,
+         "top": 20,
+         "bottom": 40
+    }
+}

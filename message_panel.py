@@ -35,8 +35,7 @@ class MessagePanel:
         recent messages displayed inside.
         
         Parameters:
-          - canvas: A canvas object that must support 'draw_text' and 'draw_rectangle'
-                    methods with appropriate parameters.
+          - canvas: A canvas object 
         """
         # Get formatted messages and their colors from the message service
         messages, colors = self.message_service.get_formatted_messages()
@@ -48,14 +47,14 @@ class MessagePanel:
         panel_height = len(messages) * self.line_spacing + 2 * self.padding
         panel_width = canvas.width - 2 * self.x
         
-        # Draw panel background
-        canvas.draw_filled_rect(
-            self.x, 
-            canvas.height - self.y_offset - panel_height,
-            panel_width, 
-            panel_height,
-            color=self.bg_color
-        )
+      #   # Draw panel background
+      #   canvas.draw_filled_rect(
+      #       self.x, 
+      #       canvas.height - self.y_offset - panel_height,
+      #       panel_width, 
+      #       panel_height,
+      #       color=self.bg_color
+      #   )
         
         # Draw each message with its corresponding color
         # Reverse the messages to have newest at the bottom
