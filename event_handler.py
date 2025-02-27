@@ -215,6 +215,12 @@ class _EventHandler:
                 shift_pressed = (self.viewer.active_button == 'shift-left')
                 if clicked_obj is None:
                     # Clear selection if nothing was clicked.
+                    # Update the 'selected' property for all atoms and bonds
+                    for atom in self.viewer.selected_atoms:
+                        atom.selected = False
+                    for bond in self.viewer.selected_bonds:
+                        bond.selected = False
+                    # Clear selection lists
                     self.viewer.selected_atoms.clear()
                     self.viewer.selected_bonds.clear()
                     self.viewer.selected_atom_indices.clear()
@@ -222,7 +228,11 @@ class _EventHandler:
                 else:
                     if hasattr(clicked_obj, 'atom') and clicked_obj.atom is not None:
                         # Clear bond selections if an atom is clicked.
+                        for bond in self.viewer.selected_bonds:
+                            bond.selected = False
                         self.viewer.selected_bonds.clear()
+                        self.viewer.selected_bond_ids.clear()
+                        
                         underlying_atom = clicked_obj.atom
                         if shift_pressed:
                             if underlying_atom in self.viewer.selected_atoms:
@@ -252,7 +262,11 @@ class _EventHandler:
                             )
                     elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
                         # Clear atom selections if a bond is clicked.
+                        for atom in self.viewer.selected_atoms:
+                            atom.selected = False
                         self.viewer.selected_atoms.clear()
+                        self.viewer.selected_atom_indices.clear()
+                        
                         underlying_bond = clicked_obj.bond
                         if shift_pressed:
                             if underlying_bond in self.viewer.selected_bonds:
@@ -278,6 +292,9 @@ class _EventHandler:
                                     f"{underlying_bond.atom2.symbol}{underlying_bond.atom2.index} to selection"
                                 )
                         else:
+                            # Clear existing bond selections
+                            for bond in self.viewer.selected_bonds:
+                                bond.selected = False
                             self.viewer.selected_bonds = [underlying_bond]
                             underlying_bond.selected = True
                             self.viewer.selected_bond_ids = [
@@ -290,6 +307,10 @@ class _EventHandler:
                             )
                     else:
                         # Clear selection if no valid object was clicked.
+                        for atom in self.viewer.selected_atoms:
+                            atom.selected = False
+                        for bond in self.viewer.selected_bonds:
+                            bond.selected = False
                         self.viewer.selected_atoms.clear()
                         self.viewer.selected_bonds.clear()
                         self.viewer.selected_atom_indices.clear()
