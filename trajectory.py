@@ -11,6 +11,7 @@ converted into a fully processed MoleculeWithNCIs when needed.
 import os
 import sys
 import numpy as np
+import re
 from abc import ABC, abstractmethod
 from molecule_nci import MoleculeWithNCIs  # Assumes molecule_nci.py (and molecule.py) are in the path
 
@@ -137,6 +138,251 @@ class XYZTrajectoryParser(TrajectoryParser):
         return frames, metadata
 
 
+class GaussianTrajectoryParser(TrajectoryParser):
+    """
+    Parser for Gaussian log/output files containing geometries and energies.
+    Handles both single-point calculations and optimization trajectories.
+    """
+    
+    # List of orientation types in order of preference
+    ORIENTATIONS = ["Standard", "Input", "Z-Matrix"]
+    
+    @classmethod
+    def can_parse(cls, file_path):
+        """
+        Determines if this parser can handle the given file
+        
+        Parameters:
+            file_path (str): Path to the file to check
+            
+        Returns:
+            bool: True if this parser can handle the file
+        """
+        # Check file extension
+        if not file_path.lower().endswith(('.log', '.out')):
+            return False
+            
+        # Check content for Gaussian markers
+        try:
+            with open(file_path, 'r') as f:
+                # Read first few lines to identify Gaussian output
+                for _ in range(20):  # Check first 20 lines
+                    line = next(f, '')
+                    if "Gaussian" in line or "GAUSSIAN" in line:
+                        return True
+            return False
+        except:
+            return False
+    
+    @classmethod
+    def parse(cls, file_path):
+        """
+        Parse Gaussian output file into raw frames and metadata
+        
+        Parameters:
+            file_path (str): Path to the file to parse
+            
+        Returns:
+            tuple: (raw_frames, metadata) where:
+                  - raw_frames is a list of frame data blocks in XYZ format
+                  - metadata is a dict with file-level metadata
+        """
+        # Extract base name for metadata
+        base_name = os.path.basename(file_path)
+        if base_name.lower().endswith(('.log', '.out')):
+            base_name = base_name[:-4]
+            
+        metadata = {
+            'file_name': base_name,
+            'format': 'gaussian',
+            'path': file_path
+        }
+        
+        # Parse energies and geometries
+        energies = cls._parse_opt_energies(file_path)
+        geometries = cls._parse_geometries(file_path)
+        
+        # Convert to XYZ format frames
+        raw_frames = []
+        
+        for step in sorted(energies.keys()):
+            energy_value, energy_type = energies[step]
+            
+            # Get the preferred geometry for this step (0-indexed, so step-1)
+            orientation, geom = cls._get_preferred_geometry(geometries, step-1)
+            
+            if geom:
+                # Convert to XYZ format
+                xyz_frame = cls._convert_to_xyz(geom, energy_value, energy_type, orientation, step)
+                raw_frames.append(xyz_frame)
+                
+                # Store energy info in metadata for later reference
+                if 'energy_data' not in metadata:
+                    metadata['energy_data'] = {}
+                metadata['energy_data'][len(raw_frames)-1] = {
+                    'value': energy_value,
+                    'type': energy_type,
+                    'orientation': orientation,
+                    'step': step
+                }
+        
+        return raw_frames, metadata
+    
+    @staticmethod
+    def _parse_opt_energies(logfile_path):
+        """
+        Parse geometry-optimization energies from a Gaussian log file.
+        Returns a dictionary: step_number -> (final energy, label).
+
+        The label might be 'SCF', 'MP2', 'Double-Hybrid', or 'External'.
+        Overwrites SCF energies with correlated or external energies
+        for the same step if present.
+        """
+        # This is directly copied from parse-gaussian.py to preserve the exact logic
+        final_energies = {}    # step_number -> (energy_value, label)
+
+        # Regex patterns:
+        # 1) SCF/hybrid/double-hybrid preliminary line
+        scf_done_pat = re.compile(
+            r'^ *SCF Done:\s+E\(\w+\)\s*=\s*([-\d.]+(?:[DEe][+\-]?\d+)?)'
+        )
+
+        # 3) MP2 final lines:
+        #    Example: " E2 = -0.72D+00 EUMP2 = -0.2443116D+03"
+        #    We do *not* use '^', so it can appear anywhere in the line.
+        #    We'll just look for the substring "EUMP2 =" or "E(MP2)=" plus the energy.
+        mp2_pat = re.compile(
+            r'(?:EUMP2\s*=\s*|E\(MP2\)\s*=\s*)([-\d.]+(?:[DEe][+\-]?\d+)?)'
+        )
+
+        # 4) Double-hybrid final correlation lines "E(...)= ...".
+        #    We'll pick the last one if line has multiple E(...)= ...
+        dh_correlation_pat = re.compile(r'\bE\([\w\d]+\)\s*=\s*([-\d.]+(?:[DEe][+\-]?\d+)?)')
+
+        # 5) External code lines
+        ext_pat = re.compile(r'^(?:Energy=|Recovered energy=)\s*([-\d.]+(?:[DEe][+\-]?\d+)?)')
+
+        current_step = 0
+        with open(logfile_path, 'r') as f:
+            for raw_line in f:
+                line = raw_line.strip()
+
+                # SCF line => store (unless overridden)
+                scf_match = scf_done_pat.match(line)
+                if scf_match:
+                    current_step += 1
+                    val = float(scf_match.group(1).replace('D','E'))
+                    final_energies[current_step] = (val, 'SCF')
+                    continue
+
+                # MP2 line => override if found
+                # Here we do a .search(...) so it can match anywhere in the line
+                mp2_match = mp2_pat.search(line)
+                if mp2_match and current_step > 0:
+                    val = float(mp2_match.group(1).replace('D','E'))
+                    final_energies[current_step] = (val, 'MP2')
+                    continue
+
+                # Double-hybrid final correlation => E(...)= ...
+                if 'E2(' in line and current_step > 0:
+                    matches = dh_correlation_pat.findall(line)
+                    if matches:
+                        # The last match is presumably the final total
+                        val_str = matches[-1]
+                        val = float(val_str.replace('D','E'))
+                        final_energies[current_step] = (val, 'Double-Hybrid')
+                        continue
+
+                # External lines => override
+                ext_match = ext_pat.match(line)
+                if ext_match:
+                    current_step += 1
+                    val = float(ext_match.group(1).replace('D','E'))
+                    final_energies[current_step] = (val, 'External')
+                    continue
+
+        return final_energies
+
+    @classmethod
+    def _parse_geometries(cls, logfile_path):
+        """
+        Parse geometries from a Gaussian log file.
+        Returns a dictionary: orientation_type -> list of geometry blocks
+        """
+        # Initialize data buckets for orientations
+        data = {key: [] for key in cls.ORIENTATIONS}
+        
+        with open(logfile_path, 'r') as file:
+            lines = iter(file)
+            for line in lines:
+                words = line.split()
+                if len(words) >= 2 and words[0] in cls.ORIENTATIONS and words[1] == "orientation:":
+                    orientation_type = words[0]
+
+                    # Skip header lines
+                    for _ in range(4):
+                        next(lines, None)
+
+                    collected_lines = []
+                    for data_line in lines:
+                        entries = data_line.split()
+                        if len(entries) == 1:
+                            break
+                        if len(entries) >= 6:
+                            atom_num, x, y, z = entries[1], entries[3], entries[4], entries[5]
+                            collected_lines.append((int(atom_num), float(x), float(y), float(z)))
+
+                    # Store this geometry block
+                    data[orientation_type].append(collected_lines)
+
+        return data
+
+    @classmethod
+    def _get_preferred_geometry(cls, geometries, index):
+        """
+        Get the preferred geometry from the available orientations.
+        Returns (orientation, geometry) or (None, None) if no geometry found
+        """
+        for orientation in cls.ORIENTATIONS:
+            if geometries[orientation] and index < len(geometries[orientation]):
+                return orientation, geometries[orientation][index]
+        return None, None
+
+    @staticmethod
+    def _convert_to_xyz(geometry, energy_value, energy_type, orientation, step):
+        """
+        Convert a Gaussian geometry block to XYZ format
+        
+        Parameters:
+            geometry: List of tuples (atomic_number, x, y, z)
+            energy_value: The energy value
+            energy_type: The energy type (SCF, MP2, etc.)
+            orientation: The orientation type (Standard, Input, Z-Matrix)
+            step: The calculation step number
+            
+        Returns:
+            List of strings in XYZ format
+        """
+        from elements_table import Elements  # Import here to avoid circular imports
+        
+        # Count atoms
+        num_atoms = len(geometry)
+        
+        # Create header lines with energy in a format that _parse_energy() will recognize
+        xyz_frame = [
+            str(num_atoms),
+            f"Step {step} | {orientation} orientation | Energy= {energy_value} | Type: {energy_type}"
+        ]
+        
+        # Add atom lines
+        for atom_data in geometry:
+            atomic_num, x, y, z = atom_data
+            symbol = Elements.symbol(atomic_num)
+            xyz_frame.append(f"{symbol:<5}{x:17.12f}{y:17.12f}{z:17.12f}")
+        
+        return xyz_frame
+
+
 class Trajectory:
     """
     Class for handling molecular trajectories from various file formats.
@@ -144,7 +390,7 @@ class Trajectory:
     """
     
     # Register all available parsers
-    _parsers = [XYZTrajectoryParser]
+    _parsers = [XYZTrajectoryParser, GaussianTrajectoryParser]
     
     def __init__(self, raw_frames, metadata=None):
         """
@@ -247,12 +493,20 @@ class Trajectory:
         For each frame, the molecule is fully processed (if not already) so that
         its Energy attribute is available.
         """
-        print("Frame\tEnergy")
-        print("----------------")
+        print("Frame\tEnergy\tType\tOrientation")
+        print("----------------------------------------")
         for i in range(len(self._raw_frames)):
             mol = self.get_frame(i)
-            energy_str = f"{mol.Energy:.4f}" if mol.Energy is not None else "N/A"
-            print(f"{i:3d}\t{energy_str}")
+            energy_str = f"{mol.Energy:.6f}" if mol.Energy is not None else "N/A"
+            
+            # Add energy type and orientation if available in metadata
+            energy_type = "N/A"
+            orientation = "N/A"
+            if self.metadata and 'energy_data' in self.metadata and i in self.metadata['energy_data']:
+                energy_type = self.metadata['energy_data'][i].get('type', 'N/A')
+                orientation = self.metadata['energy_data'][i].get('orientation', 'N/A')
+                
+            print(f"{i:3d}\t{energy_str}\t{energy_type}\t{orientation}")
 
     def print_distance_table(self, atom1, atom2):
         """
@@ -388,7 +642,8 @@ class Trajectory:
         if self.metadata:
             print("\nMetadata:")
             for key, value in self.metadata.items():
-                print(f"  {key}: {value}")
+                if key != 'energy_data':  # Skip detailed energy data in summary
+                    print(f"  {key}: {value}")
             
         # Force processing of frames to obtain energies (if available)
         energies = []
@@ -397,7 +652,17 @@ class Trajectory:
             if mol.Energy is not None:
                 energies.append(mol.Energy)
         if energies:
-            print(f"\nEnergy range: {min(energies):.4f} to {max(energies):.4f}")
+            print(f"\nEnergy range: {min(energies):.6f} to {max(energies):.6f}")
+            
+            # Add energy type info if available
+            if 'format' in self.metadata and self.metadata['format'] == 'gaussian':
+                energy_types = set()
+                if 'energy_data' in self.metadata:
+                    for data in self.metadata['energy_data'].values():
+                        if 'type' in data:
+                            energy_types.add(data['type'])
+                if energy_types:
+                    print(f"Energy types: {', '.join(energy_types)}")
         else:
             print("\nNo energy information available.")
 
@@ -457,7 +722,7 @@ def main():
         if all(e is not None for e in energies):
             median_energy = sorted(energies)[len(energies) // 2]
             filtered = traj.filter_frames(lambda mol: mol.Energy < median_energy)
-            print(f"Filtered trajectory has {len(filtered._raw_frames)} frames (energy < {median_energy:.4f})")
+            print(f"Filtered trajectory has {len(filtered._raw_frames)} frames (energy < {median_energy:.6f})")
 
 
 if __name__ == "__main__":
