@@ -100,6 +100,10 @@ class MoleculeViewer(X11Window):
         
         # Energy graph for trajectory visualization
         self.energy_graph = None
+        
+        # Graph mode tracking
+        self.graph_mode = "energy"  # Options: "energy", "bond_length"
+        self.selected_bond_for_graph = None  # Will store the bond ID for graph (atom1_idx, atom2_idx)
 
         self.show_hydrogens = True
 
@@ -122,10 +126,35 @@ class MoleculeViewer(X11Window):
         # Reset the energy graph so it will be recreated with the new trajectory data
         self.energy_graph = None
 
+    def calculate_bond_length_trajectory(self, atom1_idx, atom2_idx):
+        """
+        Calculate bond length between two atoms across all frames in the trajectory.
+        
+        Parameters:
+            atom1_idx, atom2_idx (int): Atom indices
+            
+        Returns:
+            tuple: (x_values, y_values) where x_values are frame numbers and 
+                   y_values are bond lengths in Ångströms
+        """
+        if self.trajectory is None:
+            return [], []
+        
+        x_values = list(range(self.total_frames))
+        y_values = []
+        
+        for frame_idx in range(self.total_frames):
+            # Get the molecule for this frame (without changing the current frame)
+            mol = self._traj_manager.trajectory.get_frame(frame_idx)
+            # Calculate distance between the atoms (0-indexed in molecule_nci)
+            distance = mol.distance(atom1_idx-1, atom2_idx-1)
+            y_values.append(distance)
+        
+        return x_values, y_values
+
     def ensure_energy_graph(self):
         """
-        Initialize the energy vs. frame graph if a trajectory with energy data is available,
-        or update its position if already created.
+        Initialize or update the graph based on the current mode (energy or bond length).
         """
         # Configure graph position in bottom right corner
         thumb_width = 150
@@ -134,7 +163,13 @@ class MoleculeViewer(X11Window):
         thumb_x = self.canvas.width - thumb_width - thumb_margin
         thumb_y = self.canvas.height - thumb_height - thumb_margin
         
-        if self.energy_graph is None:
+        # If we're in bond length mode, ensure we have a selected bond
+        if self.graph_mode == "bond_length" and self.selected_bond_for_graph is None:
+            # If no bond is selected, revert to energy mode
+            self.graph_mode = "energy"
+        
+        # Prepare data based on graph mode
+        if self.graph_mode == "energy":
             # Skip if no trajectory is available
             if self.trajectory is None:
                 return
@@ -147,11 +182,29 @@ class MoleculeViewer(X11Window):
             # Prepare graph data
             x_values = list(range(len(energies)))
             y_values = [e if e is not None else 0.0 for e in energies]
+            title = "Energy"
+            y_axis_title = ""
+        else:
+            # Bond length graph
+            atom1_idx, atom2_idx = self.selected_bond_for_graph
+            atom1 = next((a for a in self.ortep_mol.atoms if a.index == atom1_idx), None)
+            atom2 = next((a for a in self.ortep_mol.atoms if a.index == atom2_idx), None)
             
-            # Create a custom minimal theme
-            custom_minimal_theme = MINIMAL_THEME.copy()
-            custom_minimal_theme["margin"] = {"left": 10, "right": 10, "top": 10, "bottom": 10}
+            # Get bond length data
+            x_values, y_values = self.calculate_bond_length_trajectory(atom1_idx, atom2_idx)
             
+            # Prepare title with atom symbols
+            if atom1 and atom2:
+                title = f"{atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}"
+            else:
+                title = "Bond Length"
+            y_axis_title = ""
+        
+        # Create a custom minimal theme
+        custom_minimal_theme = MINIMAL_THEME.copy()
+        custom_minimal_theme["margin"] = {"left": 10, "right": 10, "top": 10, "bottom": 10}
+        
+        if self.energy_graph is None:
             # Create the graph
             self.energy_graph = GraphViewer(
                 canvas=self.canvas,
@@ -164,14 +217,23 @@ class MoleculeViewer(X11Window):
                 region_width=thumb_width,
                 region_height=thumb_height,
                 x_axis_title="",
-                y_axis_title="",
-                title="Energy",
+                y_axis_title=y_axis_title,
+                title=title,
                 theme=custom_minimal_theme
             )
         else:
-            # Update existing graph position to maintain bottom-right corner placement
+            # Update existing graph position
             self.energy_graph.region_x = thumb_x
             self.energy_graph.region_y = thumb_y
+            
+            # Update data if the mode changed
+            if self.energy_graph.title != title:
+                self.energy_graph.update_data(
+                    xdata=x_values,
+                    ydata=y_values,
+                    title=title,
+                    y_axis_title=y_axis_title
+                )
 
     def set_frame(self, frame_index):
         """
@@ -193,8 +255,14 @@ class MoleculeViewer(X11Window):
             self.energy_graph.update_current_frame(frame_index)
 
         # Reapply persistent selection.
+        self.selected_atoms = []
         for atom in self.ortep_mol.atoms:
-            atom.selected = (atom.index in self.selected_atom_indices)
+            if atom.index in self.selected_atom_indices:
+                atom.selected = True
+                self.selected_atoms.append(atom)
+            else:
+                atom.selected = False
+                
         self.selected_bonds = []
         for bond in self.ortep_mol.bonds:
             key = (min(bond.atom1.index, bond.atom2.index), max(bond.atom1.index, bond.atom2.index))
@@ -203,6 +271,22 @@ class MoleculeViewer(X11Window):
                 self.selected_bonds.append(bond)
             else:
                 bond.selected = False
+
+        # If in bond length mode, check if the selected bond still exists
+        if self.graph_mode == "bond_length" and self.selected_bond_for_graph:
+            atom1_idx, atom2_idx = self.selected_bond_for_graph
+            bond_exists = False
+            for bond in self.ortep_mol.bonds:
+                if ((bond.atom1.index == atom1_idx and bond.atom2.index == atom2_idx) or
+                    (bond.atom1.index == atom2_idx and bond.atom2.index == atom1_idx)):
+                    bond_exists = True
+                    break
+            
+            if not bond_exists:
+                # Bond doesn't exist in this frame, switch back to energy mode
+                self.graph_mode = "energy"
+                self.selected_bond_for_graph = None
+                self.energy_graph = None  # Force recreation
 
         self.redraw()
 
@@ -219,6 +303,8 @@ class MoleculeViewer(X11Window):
             next_bond_type = next_bond.__name__.replace("Bond", "") if next_bond else "None"
             lines.append(f"Bond: {b.atom1.symbol}{b.atom1.index}-{b.atom2.symbol}{b.atom2.index} | Type: {bond_type} | Length: {b.length:.4f} Å")
             lines.append(f"Next bond type: {next_bond_type}")
+            if len(self.selected_bonds) == 1:
+                lines.append("Press 'p' to toggle bond length plot")
         elif self.selected_atoms:
             sel_info = ", ".join(f"{a.symbol}{a.index}" for a in self.selected_atoms)
             lines.append(f"Selected atoms: {sel_info}")
@@ -240,7 +326,50 @@ class MoleculeViewer(X11Window):
         else:
             lines.append(f"Bond propagation: {prop_status}")
             
+        # Add graph mode info
+        if self.graph_mode == "bond_length" and self.selected_bond_for_graph:
+            atom1_idx, atom2_idx = self.selected_bond_for_graph
+            atom1 = next((a for a in self.ortep_mol.atoms if a.index == atom1_idx), None)
+            atom2 = next((a for a in self.ortep_mol.atoms if a.index == atom2_idx), None)
+            if atom1 and atom2:
+                lines.append(f"Graph: Bond length {atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}")
+        else:
+            lines.append("Graph: Energy")
+            
         self.hud_panel.update_lines(lines)
+
+    def toggle_graph_mode(self):
+        """
+        Toggle between energy and bond length visualization modes.
+        """
+        if self.selected_bonds and len(self.selected_bonds) == 1:
+            bond = self.selected_bonds[0]
+            atom1_idx = bond.atom1.index
+            atom2_idx = bond.atom2.index
+            
+            if self.graph_mode == "energy":
+                # Switch to bond length mode
+                self.graph_mode = "bond_length"
+                self.selected_bond_for_graph = (atom1_idx, atom2_idx)
+                self.message_service.log_info(
+                    f"Showing bond length for {bond.atom1.symbol}{atom1_idx}-{bond.atom2.symbol}{atom2_idx}"
+                )
+            else:
+                # Switch back to energy mode
+                self.graph_mode = "energy"
+                self.message_service.log_info("Showing energy plot")
+            
+            # Refresh the graph
+            self.energy_graph = None  # Force recreation
+            self.ensure_energy_graph()
+        elif self.graph_mode == "bond_length":
+            # Switch back to energy mode if in bond length mode but no bond selected
+            self.graph_mode = "energy"
+            self.message_service.log_info("Showing energy plot")
+            self.energy_graph = None  # Force recreation
+            self.ensure_energy_graph()
+        else:
+            self.message_service.log_info("Select a bond first to toggle length graph")
 
     def clear_bond_edits(self):
         """

@@ -78,12 +78,18 @@ class _EventHandler:
             self.viewer.message_service.log_info(f"Hydrogens {status}")
             self.viewer.set_frame(self.viewer.current_frame)
         elif keychar == 'p':
-            # Toggle bond propagation
-            enabled = self.viewer.bond_edit_tracker.toggle()
-            status = "enabled" if enabled else "disabled"
-            self.viewer.message_service.log_info(f"Bond propagation {status}")
-            # Re-apply current frame to reflect the change
-            self.viewer.set_frame(self.viewer.current_frame)
+            # Check if Shift is pressed to differentiate between bond propagation and graph toggle
+            if evt.state & X.ShiftMask:
+                # Toggle bond propagation (original functionality)
+                enabled = self.viewer.bond_edit_tracker.toggle()
+                status = "enabled" if enabled else "disabled"
+                self.viewer.message_service.log_info(f"Bond propagation {status}")
+                # Re-apply current frame to reflect the change
+                self.viewer.set_frame(self.viewer.current_frame)
+            else:
+                # Toggle graph mode between energy and bond length
+                self.viewer.toggle_graph_mode()
+                self.viewer.redraw()
         elif keychar == 'B':
             # Bond Toggle Logic (Uppercase B)
             if len(self.viewer.selected_atoms) == 2:
@@ -325,6 +331,12 @@ class _EventHandler:
                                 f"Selected bond {underlying_bond.atom1.symbol}{underlying_bond.atom1.index}-"
                                 f"{underlying_bond.atom2.symbol}{underlying_bond.atom2.index}"
                             )
+                            
+                            # If in energy graph mode, suggest toggling to bond length graph
+                            if self.viewer.energy_graph is not None and self.viewer.graph_mode == "energy":
+                                self.viewer.message_service.log_info(
+                                    "Press 'p' to show bond length plot"
+                                )
                     else:
                         # Clear selection if no valid object was clicked.
                         for atom in self.viewer.selected_atoms:
