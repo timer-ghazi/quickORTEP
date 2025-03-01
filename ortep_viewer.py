@@ -11,12 +11,14 @@ It also supports bond propagation across trajectory frames.
 import sys
 import time
 import threading
+import math
 from Xlib import XK, X
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from hud import HUDPanel
 from ortep_renderer import ORTEP_MoleculeRenderer
 from config import CANVAS_SETTINGS, VIEWER_INTERACTION, MINIMAL_THEME
 from config import HUD_STYLE, MESSAGE_PANEL_STYLE, MESSAGE_TYPES, GRAPH_SETTINGS
+from config import CURRENT_THEME, GRID_SETTINGS
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from message_service import MessageService
 from message_panel import MessagePanel
@@ -134,6 +136,82 @@ class MoleculeViewer(X11Window):
 
         # Initialize bond edit tracker for propagating bond changes across frames
         self.bond_edit_tracker = BondEditTracker()
+
+    def draw_grid(self):
+        """
+        Draw a background grid with major and minor lines.
+        Major lines are drawn every 1 Å, and minor lines every 0.25 Å.
+        The grid remains fixed relative to the molecular origin.
+        """
+        # Skip if grid is not enabled in the current theme
+        if not CURRENT_THEME.get("show_grid", False):
+            return
+            
+        # Get grid settings
+        major_spacing = GRID_SETTINGS["major_spacing"]  # Å
+        minor_divisions = GRID_SETTINGS["minor_divisions"]
+        minor_spacing = major_spacing / minor_divisions  # Å
+        
+        major_color = CURRENT_THEME.get("grid_major_color", (10, 61, 77))
+        minor_color = CURRENT_THEME.get("grid_minor_color", (15, 71, 87))
+        
+        major_thickness = GRID_SETTINGS["major_thickness"]
+        minor_thickness = GRID_SETTINGS["minor_thickness"]
+        
+        # Calculate the grid based on current view parameters
+        scale = self.view_params.scale
+        x_offset = self.view_params.x_offset
+        y_offset = self.view_params.y_offset
+        
+        # Calculate visible area in Ångströms
+        left_a = -x_offset / scale
+        right_a = left_a + (self.canvas.width / scale)
+        top_a = -y_offset / scale
+        bottom_a = top_a + (self.canvas.height / scale)
+        
+        # Round to the nearest major grid line outside the viewport
+        left_a_grid = math.floor(left_a / major_spacing) * major_spacing
+        right_a_grid = math.ceil(right_a / major_spacing) * major_spacing
+        top_a_grid = math.floor(top_a / major_spacing) * major_spacing
+        bottom_a_grid = math.ceil(bottom_a / major_spacing) * major_spacing
+        
+        # Draw major grid lines (vertical)
+        x_a = left_a_grid
+        while x_a <= right_a_grid:
+            x_px = int(x_a * scale + x_offset)
+            self.canvas.draw_line(x_px, 0, x_px, self.canvas.height, 
+                                thickness=major_thickness, color=major_color)
+            x_a += major_spacing
+        
+        # Draw major grid lines (horizontal)
+        y_a = top_a_grid
+        while y_a <= bottom_a_grid:
+            y_px = int(y_a * scale + y_offset)
+            self.canvas.draw_line(0, y_px, self.canvas.width, y_px, 
+                                thickness=major_thickness, color=major_color)
+            y_a += major_spacing
+        
+        # Draw minor grid lines if enabled and visible enough
+        if minor_divisions > 1 and scale > 20:  # Only draw minor lines when sufficiently zoomed in
+            # Draw minor grid lines (vertical)
+            x_a = left_a_grid
+            while x_a <= right_a_grid:
+                for i in range(1, minor_divisions):
+                    minor_x_a = x_a + (i * minor_spacing)
+                    minor_x_px = int(minor_x_a * scale + x_offset)
+                    self.canvas.draw_dashed_line(minor_x_px, 0, minor_x_px, self.canvas.height, 
+                                            thickness=minor_thickness, color=minor_color)
+                x_a += major_spacing
+            
+            # Draw minor grid lines (horizontal)
+            y_a = top_a_grid
+            while y_a <= bottom_a_grid:
+                for i in range(1, minor_divisions):
+                    minor_y_a = y_a + (i * minor_spacing)
+                    minor_y_px = int(minor_y_a * scale + y_offset)
+                    self.canvas.draw_dashed_line(0, minor_y_px, self.canvas.width, minor_y_px, 
+                                            thickness=minor_thickness, color=minor_color)
+                y_a += major_spacing
 
     def set_trajectory(self, trajectory):
         """
@@ -399,6 +477,17 @@ class MoleculeViewer(X11Window):
         self.message_service.log_info("Cleared all bond edits")
         self.set_frame(self.current_frame)
 
+    def toggle_grid(self):
+        """
+        Toggle the grid visibility in the current theme.
+        """
+        current_setting = CURRENT_THEME.get("show_grid", False)
+        CURRENT_THEME["show_grid"] = not current_setting
+        
+        status = "enabled" if CURRENT_THEME["show_grid"] else "disabled"
+        self.message_service.log_info(f"Grid {status}")
+        self.redraw()
+
     def redraw(self):
         with self.draw_lock:
             # Check if window has been resized
@@ -412,6 +501,10 @@ class MoleculeViewer(X11Window):
                     pass
             
             self.canvas.clear()
+            
+            # Draw the grid if enabled in the current theme
+            self.draw_grid()
+            
             self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
             
             # Ensure the energy graph is initialized if needed and positioned correctly

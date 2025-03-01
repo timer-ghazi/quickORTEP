@@ -35,6 +35,13 @@ SCIFI_THEME = {
     "graph_tick_color": (0, 153, 136),      # Slightly darker teal ticks
     "graph_data_color": (0, 255, 170),      # Bright cyan for data
     "graph_indicator_color": (119, 255, 221), # Light cyan for indicators
+    
+    # Grid settings
+    "show_grid": True,                      # Show grid by default
+#    "grid_major_color": (5, 16, 21),       # #051015 almost invisible
+#    "grid_major_color": (10, 61, 77),      # #071f28 
+    "grid_major_color": (6, 24, 31),      # #06181f
+    "grid_minor_color": (5, 16, 21),       #  #051015 almost invisible
 }
 
 # Light theme (default, white background)
@@ -67,6 +74,11 @@ LIGHT_THEME = {
     "graph_tick_color": (0, 0, 0),          # Black
     "graph_data_color": (255, 0, 0),        # Red
     "graph_indicator_color": (0, 0, 255),   # Blue
+    
+    # Grid settings
+    "show_grid": False,                     # Hide grid by default
+    "grid_major_color": (200, 200, 200),    # Light gray for major grid lines
+    "grid_minor_color": (220, 220, 220),    # Lighter gray for minor grid lines
 }
 
 # Dark theme (black background)
@@ -99,6 +111,11 @@ DARK_THEME = {
     "graph_tick_color": (180, 180, 180),    # Medium gray
     "graph_data_color": (255, 100, 100),    # Light red
     "graph_indicator_color": (100, 100, 255),  # Light blue
+    
+    # Grid settings
+    "show_grid": True,                      # Show grid by default
+    "grid_major_color": (10, 61, 77),       # #0a3d4d - very dark teal/blue-green
+    "grid_minor_color": (15, 71, 87),       # Slightly lighter shade for minor lines
 }
 
 # Print-optimized theme (for SVG export)
@@ -131,6 +148,11 @@ PRINT_THEME = {
     "graph_tick_color": (0, 0, 0),          # Black
     "graph_data_color": (200, 0, 0),        # Darker red
     "graph_indicator_color": (0, 0, 200),   # Darker blue
+    
+    # Grid settings
+    "show_grid": True,                      # Show grid by default
+    "grid_major_color": (220, 220, 220),    # Light gray for major grid lines
+    "grid_minor_color": (235, 235, 235),    # Lighter gray for minor grid lines
 }
 
 # Matrix theme (green-on-black cyberpunk aesthetic)
@@ -163,6 +185,11 @@ MATRIX_THEME = {
     "graph_tick_color": (0, 180, 0),        # Slightly darker green ticks
     "graph_data_color": (0, 255, 120),      # Bright green-teal for data
     "graph_indicator_color": (180, 255, 180),  # Light green for indicators
+    
+    # Grid settings
+    "show_grid": True,                      # Show grid by default
+    "grid_major_color": (0, 30, 0),         # Dark green for major grid lines
+    "grid_minor_color": (0, 20, 0),         # Darker green for minor grid lines
 }
 
 # Options: LIGHT_THEME, DARK_THEME, PRINT_THEME
@@ -172,6 +199,16 @@ CURRENT_THEME = SCIFI_THEME
 
 # Global conversion factor:
 ANGSTROM_TO_PIXEL = 100
+
+# ================================
+# Grid Settings
+# ================================
+GRID_SETTINGS = {
+    "major_spacing": 1.0,      # Major grid lines every 1.0 Å
+    "minor_divisions": 2,      # 4 divisions = 0.25 Å between minor lines
+    "major_thickness": 1,      # 1 pixel thick
+    "minor_thickness": 1,      # 1 pixel thick
+}
 
 # ================================
 # Canvas Settings
