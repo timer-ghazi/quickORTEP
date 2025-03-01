@@ -28,6 +28,35 @@ class MessagePanel:
         self.bg_color = bg_color  # Note: X11 doesn't support alpha transparency
         self.padding = padding
     
+    def set_bg_color(self, color):
+        """
+        Update the background color for the message panel.
+        
+        Parameters:
+            color (tuple): RGB color tuple (r, g, b)
+        """
+        self.bg_color = color
+        
+    def refresh_styling(self, style_dict):
+        """
+        Update styling parameters from a style dictionary.
+        
+        Parameters:
+            style_dict (dict): Dictionary with styling parameters
+        """
+        if "x" in style_dict:
+            self.x = style_dict["x"]
+        if "y_offset" in style_dict:
+            self.y_offset = style_dict["y_offset"]
+        if "line_spacing" in style_dict:
+            self.line_spacing = style_dict["line_spacing"]
+        if "font_size" in style_dict:
+            self.font_size = style_dict["font_size"]
+        if "bg_color" in style_dict:
+            self.bg_color = style_dict["bg_color"]
+        if "padding" in style_dict:
+            self.padding = style_dict["padding"]
+    
     def draw(self, canvas):
         """
         Draw the message panel on the provided canvas. The panel is rendered

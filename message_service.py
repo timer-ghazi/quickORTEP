@@ -1,6 +1,7 @@
 # message_service.py
 
 import time
+from config import MESSAGE_TYPES
 
 class MessageService:
     """
@@ -21,21 +22,8 @@ class MessageService:
         self.max_messages = max_messages
         self.messages = []  # List of (timestamp, type, message)
         
-        # Define message types with their corresponding prefixes and colors
-        self.message_types = {
-            "info": {
-                "prefix": "",
-                "color": (0, 0, 0),  # Black
-            },
-            "warning": {
-                "prefix": "WARNING",
-                "color": (200, 150, 0),  # Amber
-            },
-            "error": {
-                "prefix": "ERROR",
-                "color": (200, 0, 0),  # Red
-            }
-        }
+        # Use message types from config
+        self.message_types = MESSAGE_TYPES
     
     def _add_message(self, message_type, message):
         """

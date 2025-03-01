@@ -15,7 +15,8 @@ from Xlib import XK, X
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from hud import HUDPanel
 from ortep_renderer import ORTEP_MoleculeRenderer
-from config import VIEWER_INTERACTION, MINIMAL_THEME
+from config import CANVAS_SETTINGS, VIEWER_INTERACTION, MINIMAL_THEME
+from config import HUD_STYLE, MESSAGE_PANEL_STYLE, MESSAGE_TYPES, GRAPH_SETTINGS
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from message_service import MessageService
 from message_panel import MessagePanel
@@ -48,11 +49,16 @@ class MoleculeViewer(X11Window):
         else:
             canvas_class = lambda w: X11CanvasSS(w, ss_factor=ss_factor,
                                                  tile_size=tile_size)
+        
+        # Get background color from theme settings
+        background_color = CANVAS_SETTINGS["background_color"]
+        
         super().__init__(
             width=width,
             height=height,
             title="ORTEP Style Molecule (Refactored)",
-            canvas_class=canvas_class
+            canvas_class=canvas_class,
+            background_color=background_color  # Pass the themed background color
         )
         
         # Store initial canvas dimensions to detect resizing
@@ -68,15 +74,29 @@ class MoleculeViewer(X11Window):
         )
         self.renderer = ORTEP_MoleculeRenderer()
 
-        self.hud_panel = HUDPanel(x=10, y_offset=75, line_spacing=16, font_size=14, color=(0, 0, 0))
-        self.message_service = MessageService(max_messages=3)
+        # Initialize HUD panel with themed styles
+        self.hud_panel = HUDPanel(
+            x=HUD_STYLE["x"],
+            y_offset=HUD_STYLE["y_offset"],
+            line_spacing=HUD_STYLE["line_spacing"],
+            font_size=HUD_STYLE["font_size"],
+            color=HUD_STYLE["color"]
+        )
+        
+        # Initialize message service with themed settings
+        self.message_service = MessageService(max_messages=MESSAGE_PANEL_STYLE.get("max_messages", 3))
+        
+        # Initialize message panel with themed styles
         self.message_panel = MessagePanel(
             self.message_service, 
-            x=10, 
-            y_offset=10,
-            line_spacing=16, 
-            font_size=12
+            x=MESSAGE_PANEL_STYLE["x"], 
+            y_offset=MESSAGE_PANEL_STYLE["y_offset"],
+            line_spacing=MESSAGE_PANEL_STYLE["line_spacing"], 
+            font_size=MESSAGE_PANEL_STYLE["font_size"],
+            bg_color=MESSAGE_PANEL_STYLE["bg_color"],
+            padding=MESSAGE_PANEL_STYLE["padding"]
         )
+        
         self.message_service.log_info(f"Viewer initialized ({width}x{height})")
 
         # Drawing lock to ensure thread safety.
@@ -157,9 +177,9 @@ class MoleculeViewer(X11Window):
         Initialize or update the graph based on the current mode (energy or bond length).
         """
         # Configure graph position in bottom right corner
-        thumb_width = 150
-        thumb_height = 80
-        thumb_margin = 20
+        thumb_width = GRAPH_SETTINGS["thumbnail_width"]
+        thumb_height = GRAPH_SETTINGS["thumbnail_height"]
+        thumb_margin = GRAPH_SETTINGS["thumbnail_margin"]
         thumb_x = self.canvas.width - thumb_width - thumb_margin
         thumb_y = self.canvas.height - thumb_height - thumb_margin
         

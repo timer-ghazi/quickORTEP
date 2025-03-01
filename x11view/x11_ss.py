@@ -46,21 +46,23 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
     def __init__(self,
                  x11_window,
                  ss_factor: int = 2,
-                 tile_size: int = 128):
+                 tile_size: int = 128,
+                 background_color: tuple = (255, 255, 255)):
         """
         :param x11_window: The parent X11Window object
         :param ss_factor:  Supersampling factor (e.g., 2 => 2x in each dimension)
         :param tile_size:  Desired tile size in pixels for put_image().
+        :param background_color: RGB tuple for the background color (default: white)
         """
         # Initialize parent classes
         X11CanvasBase.__init__(self, x11_window)
         X11CanvasCommon.__init__(self)
 
         self.ss_factor = ss_factor
+        self.background_color = background_color
 
         # 1) Get max request length from python-xlib's .info object
         max_req_length_units = self.display.display.info.max_request_length
-
 
         # 2) Convert to bytes, subtract overhead
         overhead = 4096  # arbitrary safety margin
@@ -91,8 +93,19 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
         )
 
         # Create a high-resolution PIL Image and Draw object
-        self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), "white")
+        # Use the background_color as the fill color
+        self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), 
+                                  tuple(self.background_color))
         self.ss_draw = ImageDraw.Draw(self.ss_image)
+
+    def set_background_color(self, color):
+        """
+        Set the background color of the canvas.
+        
+        Parameters:
+            color: RGB tuple (r, g, b) with values in range 0-255
+        """
+        self.background_color = color
 
     def create_or_resize(self, width: int, height: int) -> None:
         """
@@ -116,26 +129,28 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
             height=height
         )
 
-        # Recreate the high-res PIL image
-        self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), "white")
+        # Recreate the high-res PIL image with the current background color
+        self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), 
+                                 tuple(self.background_color))
         self.ss_draw = ImageDraw.Draw(self.ss_image)
 
     def clear(self) -> None:
         """
         Clear both the high-resolution PIL buffer and the X11 Pixmap.
         """
-        # Clear the high-res image
-        self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), "white")
+        # Clear the high-res image with the current background color
+        self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), 
+                                 tuple(self.background_color))
         self.ss_draw = ImageDraw.Draw(self.ss_image)
 
         # Clear the X11 Pixmap as well
-        white_gc = self.get_gc(
-            color=(255, 255, 255),
+        bg_gc = self.get_gc(
+            color=self.background_color,
             thickness=1,
             line_style=X.LineSolid,
             fill_style=True
         )
-        self.pixmap.poly_fill_rectangle(white_gc, [(0, 0, self.width, self.height)])
+        self.pixmap.poly_fill_rectangle(bg_gc, [(0, 0, self.width, self.height)])
 
     def flush(self) -> None:
         """
@@ -320,7 +335,7 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
         if ry is None:
             ry = rx
     
-        # Calculate the “Xlib” extent
+        # Calculate the "Xlib" extent
         extent_deg = angle_end_deg - angle_start_deg
         # If it is negative, add 360 so we do a CCW wedge
         if extent_deg < 0:
@@ -395,7 +410,7 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
         ####         pil_font = ImageFont.load_default()
 
         # -- 4) Baseline adjustment:
-        # Pillow’s text() method interprets (x, y) as the top-left corner.
+        # Pillow's text() method interprets (x, y) as the top-left corner.
         # So if we want (ss_x, ss_y) to be the baseline, we subtract the font's ascent.
         ascent, descent = pil_font.getmetrics()
         top_left_y = ss_y - ascent  # Move up so the baseline is at ss_y

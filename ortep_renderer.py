@@ -78,10 +78,12 @@ class ORTEP_MoleculeRenderer:
         Returns the RGB color tuple for an atom using the Elements module.
         """
         try:
-            hexcol = Elements.color(atom.symbol, palette="Rasmol")
+            # Use the color palette specified in ATOM_STYLE
+            hexcol = Elements.color(atom.symbol, palette=ATOM_STYLE.get("color_palette", "Rasmol"))
             rgbcol = hex_to_rgb(hexcol)
         except KeyError:
-            rgbcol = (200, 200, 200)
+            # Use the fallback color from ATOM_STYLE
+            rgbcol = ATOM_STYLE.get("fallback_color", (200, 200, 200))
         return rgbcol
 
     def draw_molecule(self, canvas, ortep_molecule, view_params):

@@ -6,6 +6,7 @@ This module provides export functionality for the MoleculeViewer.
 It currently supports exporting the rendered view to an SVG file.
 """
 
+from config import PRINT_THEME
 from x11view.svg_canvas import SVGCanvas
 
 def export_svg(canvas, renderer, molecule, view_params, filename="quickORTEP_export.svg"):
@@ -22,7 +23,13 @@ def export_svg(canvas, renderer, molecule, view_params, filename="quickORTEP_exp
     Returns:
         The filename of the exported SVG.
     """
-    svg_canvas = SVGCanvas(width=canvas.width, height=canvas.height)
+    # Create SVG canvas with print theme background color
+    svg_canvas = SVGCanvas(
+        width=canvas.width, 
+        height=canvas.height,
+        background_color=PRINT_THEME["background_color"]
+    )
+    
     view_params.as_float = True
     renderer.draw_molecule(svg_canvas, molecule, view_params)
     view_params.as_float = False

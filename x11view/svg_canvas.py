@@ -4,17 +4,36 @@ import math
 from .DejaVuSansMono import EMBEDDED_FONT_WOFF2  
 
 class SVGCanvas:
-    def __init__(self, width, height):
+    def __init__(self, width, height, background_color=(255, 255, 255)):
+        """
+        Initialize the SVG canvas with the given dimensions and background color.
+        
+        Parameters:
+            width: Canvas width in pixels
+            height: Canvas height in pixels
+            background_color: RGB tuple (r, g, b) for the background (default: white)
+        """
         self.width = width
         self.height = height
-        # Initialize the SVG document with the header.
+        self.background_color = background_color
+        
+        # Initialize the SVG document with the header
         self.svg_data = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">']
         self.embed_font_once()
+        
+        # Add background rectangle if not white
+        if self.background_color != (255, 255, 255):
+            self.add_background_rect()
 
     def rgb_to_hex(self, color):
         """Convert an (R, G, B) tuple to a #RRGGBB string."""
         return "#{:02x}{:02x}{:02x}".format(*color)
 
+    def add_background_rect(self):
+        """Add a background rectangle to the SVG with the current background color."""
+        bg_color_hex = self.rgb_to_hex(self.background_color)
+        bg_rect = f'<rect x="0" y="0" width="{self.width}" height="{self.height}" fill="{bg_color_hex}" />'
+        self.svg_data.append(bg_rect)
     
     def embed_font_once(self):
         """
@@ -31,6 +50,18 @@ class SVGCanvas:
     </style>
     """
         self.svg_data.append(style_block)
+
+    def set_background_color(self, color):
+        """
+        Set the background color for the SVG canvas.
+        
+        Parameters:
+            color: RGB tuple (r, g, b) with values in range 0-255
+        """
+        self.background_color = color
+        
+        # Clear and recreate the SVG with the new background
+        self.clear()
 
     def draw_line(self, x1, y1, x2, y2, thickness=1, color=(0,0,0)):
         """
@@ -241,6 +272,10 @@ class SVGCanvas:
             return svg_content
 
     def clear(self):
-        """Clear the canvas and start a new SVG document."""
+        """Clear the canvas and start a new SVG document with the current background color."""
         self.svg_data = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width}" height="{self.height}">']
-
+        self.embed_font_once()
+        
+        # Add background rectangle if not white
+        if self.background_color != (255, 255, 255):
+            self.add_background_rect()

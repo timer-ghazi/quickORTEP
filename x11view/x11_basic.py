@@ -22,14 +22,21 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
     then copied to the real window in flush().
     """
 
-    def __init__(self, x11_window):
+    def __init__(self, x11_window, background_color=(255, 255, 255)):
         """
         Initialize the basic canvas. Allocates an offscreen Pixmap
         to match the current window size.
+        
+        Parameters:
+            x11_window: The parent X11Window instance
+            background_color: RGB tuple for the background color (default: white)
         """
         # Initialize abstract base + common mixin
         X11CanvasBase.__init__(self, x11_window)
         X11CanvasCommon.__init__(self)
+        
+        # Store the background color
+        self.background_color = background_color
 
         # Create our offscreen Pixmap
         self.pixmap = self.x11_window.window.create_pixmap(
@@ -56,15 +63,24 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
 
     def clear(self) -> None:
         """
-        Fill the offscreen Pixmap with white.
+        Fill the offscreen Pixmap with the background color.
         """
-        white_gc = self.get_gc(
-            color=(255, 255, 255),
+        bg_gc = self.get_gc(
+            color=self.background_color,
             thickness=1,
             line_style=X.LineSolid,
             fill_style=True
         )
-        self.pixmap.poly_fill_rectangle(white_gc, [(0, 0, self.width, self.height)])
+        self.pixmap.poly_fill_rectangle(bg_gc, [(0, 0, self.width, self.height)])
+
+    def set_background_color(self, color):
+        """
+        Set the background color of the canvas.
+        
+        Parameters:
+            color: RGB tuple (r, g, b) with values in range 0-255
+        """
+        self.background_color = color
 
     def flush(self) -> None:
         """
@@ -309,4 +325,3 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
         # If you want to guard, you can check chosen_font_obj is not None.
     
         self.pixmap.draw_text(gc, x, y, text)
-    

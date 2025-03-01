@@ -33,6 +33,33 @@ class HUDPanel:
         """
         self.lines = lines
 
+    def set_color(self, color):
+        """
+        Update the text color for the HUD.
+        
+        Parameters:
+            color (tuple): RGB color tuple (r, g, b)
+        """
+        self.color = color
+        
+    def refresh_styling(self, style_dict):
+        """
+        Update styling parameters from a style dictionary.
+        
+        Parameters:
+            style_dict (dict): Dictionary with styling parameters
+        """
+        if "x" in style_dict:
+            self.x = style_dict["x"]
+        if "y_offset" in style_dict:
+            self.y_offset = style_dict["y_offset"]
+        if "line_spacing" in style_dict:
+            self.line_spacing = style_dict["line_spacing"]
+        if "font_size" in style_dict:
+            self.font_size = style_dict["font_size"]
+        if "color" in style_dict:
+            self.color = style_dict["color"]
+
     def draw(self, canvas):
         """
         Draw the HUD on the provided canvas. The HUD is rendered starting at a fixed offset
