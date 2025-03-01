@@ -5,6 +5,38 @@
 # Theme Definitions
 # ================================
 
+# Sci-Fi Holographic Theme
+SCIFI_THEME = {
+    "background_color": (8, 12, 20),        # Dark blue-black background
+    "default_text_color": (0, 255, 170),    # Bright cyan-teal text
+    "default_line_color": (0, 179, 136),    # Medium teal for lines
+
+    # Bond colors
+    "covalent_bond_color": (0, 255, 170),   # Bright cyan for primary bonds
+    "nci_bond_color": (0, 179, 136),        # Medium teal for non-covalent
+    "ts_bond_color": (68, 221, 170),        # Teal-cyan for TS bonds
+    "distance_bond_color": (100, 255, 200), # Light cyan for distance
+
+    # Atom elements - keep standard element colors but add cyan glow effect
+    "atom_border_color": (0, 221, 170),     # Cyan borders
+
+    # UI elements
+    "hud_text_color": (0, 255, 170),        # Bright cyan
+    "message_panel_bg": (10, 21, 32),       # Dark blue panel background
+    "message_info_color": (68, 221, 204),   # Cyan for normal messages
+    "message_warning_color": (255, 255, 85), # Yellow for warnings
+    "message_error_color": (255, 68, 68),   # Red for errors
+
+    # Highlight colors
+    "highlight_color": (51, 153, 255),      # Blue highlight
+
+    # Graph colors
+    "graph_axis_color": (0, 179, 136),      # Teal axes
+    "graph_tick_color": (0, 153, 136),      # Slightly darker teal ticks
+    "graph_data_color": (0, 255, 170),      # Bright cyan for data
+    "graph_indicator_color": (119, 255, 221), # Light cyan for indicators
+}
+
 # Light theme (default, white background)
 LIGHT_THEME = {
     "background_color": (255, 255, 255),    # White background
@@ -136,7 +168,7 @@ MATRIX_THEME = {
 # Options: LIGHT_THEME, DARK_THEME, PRINT_THEME
 # CURRENT_THEME = LIGHT_THEME  # Set to DARK_THEME for a dark mode
 # CURRENT_THEME = DARK_THEME 
-CURRENT_THEME = MATRIX_THEME
+CURRENT_THEME = SCIFI_THEME
 
 # Global conversion factor:
 ANGSTROM_TO_PIXEL = 100
