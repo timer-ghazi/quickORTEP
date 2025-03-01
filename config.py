@@ -101,9 +101,42 @@ PRINT_THEME = {
     "graph_indicator_color": (0, 0, 200),   # Darker blue
 }
 
+# Matrix theme (green-on-black cyberpunk aesthetic)
+MATRIX_THEME = {
+    "background_color": (0, 0, 0),          # Pure black background
+    "default_text_color": (0, 215, 0),      # Bright Matrix green text
+    "default_line_color": (0, 150, 0),      # Slightly darker green for lines
+    
+    # Bond colors
+    "covalent_bond_color": (0, 200, 0),     # Bright green for primary bonds
+    "nci_bond_color": (0, 150, 0),          # Medium green for non-covalent
+    "ts_bond_color": (20, 200, 100),        # Green-teal for TS bonds
+    "distance_bond_color": (100, 255, 100), # Light green for distance
+    
+    # Atom elements - keep standard element colors but add green tint
+    "atom_border_color": (0, 255, 0),       # Green borders
+    
+    # UI elements
+    "hud_text_color": (0, 255, 0),          # Bright Matrix green
+    "message_panel_bg": (10, 30, 10),       # Very dark green-black
+    "message_info_color": (0, 255, 0),      # Bright green for normal messages
+    "message_warning_color": (255, 255, 0), # Yellow for warnings
+    "message_error_color": (255, 0, 0),     # Red for errors
+    
+    # Highlight colors
+    "highlight_color": (0, 255, 160),       # Teal-green highlight
+    
+    # Graph colors
+    "graph_axis_color": (0, 200, 0),        # Green axes
+    "graph_tick_color": (0, 180, 0),        # Slightly darker green ticks
+    "graph_data_color": (0, 255, 120),      # Bright green-teal for data
+    "graph_indicator_color": (180, 255, 180),  # Light green for indicators
+}
+
 # Options: LIGHT_THEME, DARK_THEME, PRINT_THEME
-CURRENT_THEME = LIGHT_THEME  # Set to DARK_THEME for a dark mode
+# CURRENT_THEME = LIGHT_THEME  # Set to DARK_THEME for a dark mode
 # CURRENT_THEME = DARK_THEME 
+CURRENT_THEME = MATRIX_THEME
 
 # Global conversion factor:
 ANGSTROM_TO_PIXEL = 100
