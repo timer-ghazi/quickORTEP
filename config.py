@@ -114,7 +114,7 @@ MATRIX_THEME = {
     "distance_bond_color": (100, 255, 100), # Light green for distance
     
     # Atom elements - keep standard element colors but add green tint
-    "atom_border_color": (0, 255, 0),       # Green borders
+    "atom_border_color": (0, 200, 0),       # Green borders
     
     # UI elements
     "hud_text_color": (0, 255, 0),          # Bright Matrix green
@@ -162,7 +162,7 @@ ATOM_STYLE = {
     "min_radius": 2,
     
     # Color palette for atoms
-    "color_palette": "Rasmol",
+    "color_palette": "GreenRasmol",
     
     # Fallback color for unknown atoms
     "fallback_color": (200, 200, 200),
@@ -215,7 +215,7 @@ NCI_BOND = {
 
 TS_BOND = {
     # Bond thickness in Ångströms.
-    "thickness": 0.18,
+    "thickness": 0.12,
     
     # Bond segment length in Ångströms used for splitting bonds.
     "segment_length": 0.22,
