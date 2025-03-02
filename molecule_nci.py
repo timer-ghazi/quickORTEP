@@ -33,11 +33,7 @@ VALID_SIGMA_HOLE_ACCEPTORS = {"N", "O", "F", "S", "CL", "BR", "I"}
 class MoleculeWithNCIs(Molecule):
     """
     Subclass of Molecule that adds Non-Covalent Interaction (NCI) detection.
-
-    We no longer override 'detect_bonds' here, 
-    since the parent class handles bond detection adequately.
     """
-
     def __init__(self, title: str = ""):
         super().__init__(title=title)
         # Dictionary mapping (atom_i, atom_j) -> list of interaction records
@@ -53,7 +49,7 @@ class MoleculeWithNCIs(Molecule):
         if debug:
             print("[DEBUG] detect_all_ncis: run_steric_clashes =", run_steric_clashes)
         for priority, detect_func in _NCI_METHODS:
-            # skip steric_clashes if user requests
+            # Skip steric clash detection if requested.
             if detect_func.__name__ == "detect_steric_clashes" and (not run_steric_clashes):
                 if debug:
                     print("[DEBUG] Skipping steric_clashes.")
@@ -61,6 +57,35 @@ class MoleculeWithNCIs(Molecule):
             if debug:
                 print(f"[DEBUG] Calling {detect_func.__name__} (priority={priority})")
             detect_func(self, debug=debug)
+
+    def _vectorized_angle(self, donor_idx: int, central_idx: int, candidate_indices: np.ndarray) -> np.ndarray:
+        """
+        Vectorized calculation of angles at the central atom for given donor and candidate acceptor indices.
+        
+        Returns:
+            angles in degrees as a numpy array.
+        """
+        # Get coordinates
+        r_d = np.array([self.atoms[donor_idx].x, self.atoms[donor_idx].y, self.atoms[donor_idx].z])
+        r_c = np.array([self.atoms[central_idx].x, self.atoms[central_idx].y, self.atoms[central_idx].z])
+        # Build candidate coordinate array
+        r_candidates = np.array([[self.atoms[j].x, self.atoms[j].y, self.atoms[j].z] for j in candidate_indices])
+        
+        # Vectors from central to donor and candidates
+        v_cd = r_d - r_c  # shape (3,)
+        v_ca = r_candidates - r_c  # shape (n, 3)
+        
+        # Normalize
+        norm_cd = np.linalg.norm(v_cd)
+        norm_ca = np.linalg.norm(v_ca, axis=1)
+        # Dot products
+        dots = np.dot(v_ca, v_cd)
+        # Compute cosine values (avoid division by zero)
+        cos_angles = dots / (norm_ca * norm_cd + 1e-8)
+        # Clip for numerical safety and compute angles in degrees
+        cos_angles = np.clip(cos_angles, -1.0, 1.0)
+        angles = np.degrees(np.arccos(cos_angles))
+        return angles
 
     @register_nci(priority=0)
     def detect_hydrogen_bonds(self,
@@ -79,45 +104,63 @@ class MoleculeWithNCIs(Molecule):
         n = len(self.atoms)
         if debug:
             print("[DEBUG] detect_hydrogen_bonds")
-
+        
+        # Precompute full distance matrix once
+        dist_matrix = self.compute_distance_matrix()
+        
+        # Identify indices for hydrogen atoms
         for i in range(n):
             if self.atoms[i].symbol.upper() != "H":
                 continue
+
+            # Determine donor: from bond matrix row of hydrogen
+            donor_candidates = np.where(self.bond_matrix[i] > 0)[0]
             donor_idx = None
-            # find which atom is the donor
-            if self.bond_matrix is not None:
-                for d in range(n):
-                    if d != i and self.bond_matrix[i, d] > 0:
-                        if self.atoms[d].symbol.upper() in donors:
-                            donor_idx = d
-                            break
+            for d in donor_candidates:
+                if self.atoms[d].symbol.upper() in [d.upper() for d in donors]:
+                    donor_idx = d
+                    break
             if donor_idx is None:
                 continue
 
-            # now check possible acceptors
+            # Identify candidate acceptors: not hydrogen itself, not the donor, and with acceptable element.
+            candidate_indices = []
             for j in range(n):
                 if j == i or j == donor_idx:
                     continue
-                if self.atoms[j].symbol.upper() not in acceptors:
+                if self.atoms[j].symbol.upper() not in [a.upper() for a in acceptors]:
                     continue
+                candidate_indices.append(j)
+            if not candidate_indices:
+                continue
+            candidate_indices = np.array(candidate_indices, dtype=int)
 
-                dist_ij = self.distance(i, j)
-                if dist_ij <= max_dist:
-                    ang = self.angle(donor_idx, i, j)
-                    if ang >= angle_cutoff:
-                        pair = (min(i, j), max(i, j))
-                        if pair not in self.ncis:
-                            self.ncis[pair] = []
-                        self.ncis[pair].append({
-                            "type": "H-bond",
-                            "distance": dist_ij,
-                            "angle": ang,
-                            "angle_atoms": (donor_idx, i, j),
-                            "intra_or_inter": self._intra_or_inter(donor_idx, j)
-                        })
-                        if debug:
-                            print(f"[DEBUG] H-bond: i={i}, donor={donor_idx}, j={j}, "
-                                  f"dist={dist_ij:.2f}, angle={ang:.1f}")
+            # Vectorized filtering by distance
+            dists = dist_matrix[i, candidate_indices]
+            valid_mask = dists <= max_dist
+            if not np.any(valid_mask):
+                continue
+            valid_candidates = candidate_indices[valid_mask]
+            valid_dists = dists[valid_mask]
+
+            # Compute angles vectorized: angle(donor, H, candidate)
+            angles = self._vectorized_angle(donor_idx, i, valid_candidates)
+            # Further filter based on angle cutoff
+            for idx, ang in zip(valid_candidates, angles):
+                if ang >= angle_cutoff:
+                    pair = (min(i, idx), max(i, idx))
+                    if pair not in self.ncis:
+                        self.ncis[pair] = []
+                    self.ncis[pair].append({
+                        "type": "H-bond",
+                        "distance": dist_matrix[i, idx],
+                        "angle": ang,
+                        "angle_atoms": (donor_idx, i, idx),
+                        "intra_or_inter": self._intra_or_inter(donor_idx, idx)
+                    })
+                    if debug:
+                        print(f"[DEBUG] H-bond: i={i}, donor={donor_idx}, j={idx}, "
+                              f"dist={dist_matrix[i, idx]:.2f}, angle={ang:.1f}")
 
     @register_nci(priority=1)
     def detect_sigma_hole_bonds(self, debug=False):
@@ -131,64 +174,72 @@ class MoleculeWithNCIs(Molecule):
             {"label": "chalcogen_bond", "symbols": {"S", "SE", "TE"},  "angle_min": 130.0},
         ]
         fraction_vdw = 0.9
-
         n = len(self.atoms)
+        dist_matrix = self.compute_distance_matrix()
+
         for group in groups:
             bond_type = group["label"]
-            donor_symbols = group["symbols"]
+            donor_symbols = {s.upper() for s in group["symbols"]}
             angle_min = group["angle_min"]
 
             if debug:
                 print(f"[DEBUG] Checking {bond_type} with donors={donor_symbols}")
 
+            # Find candidate donor indices for this group
             for i in range(n):
                 sym_i = self.atoms[i].symbol.upper()
                 if sym_i not in donor_symbols:
                     continue
-
-                # gather neighbors
-                neighbors_i = [r for r in range(n) if r != i and self.bond_matrix[i, r] > 0]
                 vdw_i = Elements.vdw_radius(sym_i)
-
+                # Get neighbors from bond matrix
+                neighbors_i = np.where(self.bond_matrix[i] > 0)[0]
+                # Identify potential acceptors: not covalently bonded, not self.
+                candidate_indices = []
                 for j in range(n):
                     if j == i or j in neighbors_i:
                         continue
-                    # skip if there's a covalent bond
-                    if self.bond_matrix[i, j] > 0:
-                        continue
-
                     sym_j = self.atoms[j].symbol.upper()
                     if sym_j not in VALID_SIGMA_HOLE_ACCEPTORS:
                         continue
-
-                    dist_ij = self.distance(i, j)
-                    vdw_j = Elements.vdw_radius(sym_j)
-                    threshold = fraction_vdw * (vdw_i + vdw_j)
-
-                    if dist_ij < threshold:
-                        # check angles
-                        best_angle = None
-                        best_neighbor = None
-                        for neighbor in neighbors_i:
-                            ax = self.angle(neighbor, i, j)
-                            if ax > angle_min:
-                                best_angle = ax
-                                best_neighbor = neighbor
-                                break
-                        if best_angle:
-                            pair = (min(i, j), max(i, j))
-                            if pair not in self.ncis:
-                                self.ncis[pair] = []
-                            self.ncis[pair].append({
-                                "type": bond_type,
-                                "distance": dist_ij,
-                                "angle": best_angle,
-                                "angle_atoms": (best_neighbor, i, j),  # R–X···A
-                                "intra_or_inter": self._intra_or_inter(i, j)
-                            })
-                            if debug:
-                                print(f"[DEBUG] {bond_type}: i={i}, j={j}, "
-                                      f"dist={dist_ij:.2f}, angle={best_angle:.1f}")
+                    candidate_indices.append(j)
+                if not candidate_indices:
+                    continue
+                candidate_indices = np.array(candidate_indices, dtype=int)
+                dists = dist_matrix[i, candidate_indices]
+                # Get vdW radii for candidate acceptors
+                vdw_j = np.array([Elements.vdw_radius(self.atoms[j].symbol.upper()) for j in candidate_indices])
+                thresholds = fraction_vdw * (vdw_i + vdw_j)
+                valid_mask = dists < thresholds
+                if not np.any(valid_mask):
+                    continue
+                valid_candidates = candidate_indices[valid_mask]
+                valid_dists = dists[valid_mask]
+                
+                # For each valid candidate, check if any neighbor of i gives an angle above cutoff.
+                for idx, dist_val in zip(valid_candidates, valid_dists):
+                    best_angle = None
+                    best_neighbor = None
+                    # Check each neighbor for the angle (angle(neighbor, i, candidate))
+                    for neighbor in neighbors_i:
+                        ax = self.angle(neighbor, i, idx)
+                        if ax > angle_min:
+                            best_angle = ax
+                            best_neighbor = neighbor
+                            break
+                    if best_angle is not None:
+                        pair = (min(i, idx), max(i, idx))
+                        if pair not in self.ncis:
+                            self.ncis[pair] = []
+                        self.ncis[pair].append({
+                            "type": bond_type,
+                            "distance": dist_val,
+                            "angle": best_angle,
+                            "angle_atoms": (best_neighbor, i, idx),
+                            "intra_or_inter": self._intra_or_inter(i, idx)
+                        })
+                        if debug:
+                            print(f"[DEBUG] {bond_type}: i={i}, j={idx}, "
+                                  f"dist={dist_val:.2f}, angle={best_angle:.1f}")
 
     @register_nci(priority=999)
     def detect_steric_clashes(self,
@@ -203,48 +254,53 @@ class MoleculeWithNCIs(Molecule):
         n = len(self.atoms)
         if debug:
             print("[DEBUG] detect_steric_clashes")
-
-        for i in range(n):
-            for j in range(i+1, n):
-                sym_i = self.atoms[i].symbol.upper()
-                sym_j = self.atoms[j].symbol.upper()
-
-                if only_hydrogen_clashes and (sym_i != "H" or sym_j != "H"):
-                    continue
-
-                # skip if covalent bond
-                if self.bond_matrix[i, j] > 0:
-                    continue
-
-                # skip if they share a neighbor
-                if ignore_same_neighbor and self._share_a_neighbor(i, j):
-                    continue
-
-                dist_ij = self.distance(i, j)
-                vdw_i = Elements.vdw_radius(sym_i)
-                vdw_j = Elements.vdw_radius(sym_j)
-                # define a "clash" if dist is significantly smaller than sum of vdW radii
-                if dist_ij < (vdw_i + vdw_j - clash_tolerance):
-                    pair = (i, j)
-                    # check if there's already an NCI record marking them as e.g. H-bond
-                    existing = (self.ncis.get((i, j), []) or
-                                self.ncis.get((j, i), []))
-                    skip_clash = any(
-                        x["type"] in ["H-bond", "halogen_bond", "chalcogen_bond"]
-                        for x in existing
-                    )
-                    if not skip_clash:
-                        if pair not in self.ncis:
-                            self.ncis[pair] = []
-                        self.ncis[pair].append({
-                            "type": "steric_clash",
-                            "distance": dist_ij,
-                            "angle": None,
-                            "angle_atoms": None,
-                            "intra_or_inter": self._intra_or_inter(i, j)
-                        })
-                        if debug:
-                            print(f"[DEBUG] steric_clash: i={i}, j={j}, dist={dist_ij:.2f}")
+        dist_matrix = self.compute_distance_matrix()
+        # Precompute vdW radii array (upper-case symbols)
+        vdw_radii = np.array([Elements.vdw_radius(atom.symbol.upper()) for atom in self.atoms])
+        
+        # Use upper triangle indices (i<j)
+        triu_indices = np.triu_indices(n, k=1)
+        i_inds, j_inds = triu_indices
+        
+        # If only hydrogen clashes, filter pairs where both atoms are H
+        if only_hydrogen_clashes:
+            mask = np.array([self.atoms[i].symbol.upper() == "H" and self.atoms[j].symbol.upper() == "H" 
+                             for i, j in zip(i_inds, j_inds)])
+            i_inds = i_inds[mask]
+            j_inds = j_inds[mask]
+        
+        # Skip covalently bonded pairs
+        bond_mask = self.bond_matrix[i_inds, j_inds] == 0
+        i_inds = i_inds[bond_mask]
+        j_inds = j_inds[bond_mask]
+        
+        # Compute clash threshold for each pair
+        thresholds = vdw_radii[i_inds] + vdw_radii[j_inds] - clash_tolerance
+        dists = dist_matrix[i_inds, j_inds]
+        clash_mask = dists < thresholds
+        
+        # Process each candidate pair that passes vectorized filters
+        for i, j, d in zip(i_inds[clash_mask], j_inds[clash_mask], dists[clash_mask]):
+            # Check if they share a neighbor if required
+            if ignore_same_neighbor and self._share_a_neighbor(i, j):
+                continue
+            # Avoid duplicating interactions if another NCI exists already.
+            pair = (i, j)
+            existing = (self.ncis.get(pair, []) or self.ncis.get((j, i), []))
+            skip_clash = any(x["type"] in ["H-bond", "halogen_bond", "chalcogen_bond"]
+                             for x in existing)
+            if not skip_clash:
+                if pair not in self.ncis:
+                    self.ncis[pair] = []
+                self.ncis[pair].append({
+                    "type": "steric_clash",
+                    "distance": d,
+                    "angle": None,
+                    "angle_atoms": None,
+                    "intra_or_inter": self._intra_or_inter(i, j)
+                })
+                if debug:
+                    print(f"[DEBUG] steric_clash: i={i}, j={j}, dist={d:.2f}")
 
     def _share_a_neighbor(self, i: int, j: int) -> bool:
         """
@@ -254,15 +310,8 @@ class MoleculeWithNCIs(Molecule):
         if self.bond_matrix is None:
             return False
         n = len(self.atoms)
-        neighbors_i = []
-        neighbors_j = []
-        for k in range(n):
-            if k == i or k == j:
-                continue
-            if self.bond_matrix[i, k] > 0:
-                neighbors_i.append(k)
-            if self.bond_matrix[j, k] > 0:
-                neighbors_j.append(k)
+        neighbors_i = [k for k in range(n) if k != i and self.bond_matrix[i, k] > 0]
+        neighbors_j = [k for k in range(n) if k != j and self.bond_matrix[j, k] > 0]
         return len(set(neighbors_i).intersection(set(neighbors_j))) > 0
 
     def _intra_or_inter(self, i: int, j: int) -> str:
