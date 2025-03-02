@@ -5,16 +5,7 @@
 # a covalent adjacency matrix using data from elements_table.py,
 # and providing geometry utilities (distance, angle, dihedral).
 #
-# This version adds handling for extra metadata:
-#   - XYZ_Comment
-#   - Energy
-#   - file_name (stripped of the .xyz extension)
-#   - frame_number
 # 
-# Wed Feb 19 2025
-# - added Gaussian-style standard orientation method
-# - universal XYZ `read_xyz_data()` method for reading any type of XYZ 
-# - extended to store & parse metadata in XYZ comments (energy, etc.)
 
 import sys
 import math
@@ -282,28 +273,45 @@ class Molecule:
                           frame_number=frame_number)
         return mol
 
+    def compute_distance_matrix(self) -> np.ndarray:
+        """
+        Computes the pairwise Euclidean distance matrix between atoms using vectorized operations.
+        
+        If the coordinate array is defined as $C$ with shape (n, 3), the distance between any two atoms
+        is given by:
+        
+        $$
+        d_{ij} = \sqrt{\sum_{k=1}^{3} (C_{ik} - C_{jk})^2}
+        $$
+        
+        Returns:
+            A numpy ndarray of shape (n, n) with distances.
+        """
+        coords = np.array([[atom.x, atom.y, atom.z] for atom in self.atoms])
+        # Broadcasting to get differences: (n,1,3) - (1,n,3)
+        diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+        dist_matrix = np.sqrt(np.sum(diff**2, axis=-1))
+        return dist_matrix
+
     def detect_bonds(self, tolerance: float = 0.3):
         """
-        Fills self.bond_matrix by comparing interatomic distances
+        Fills self.bond_matrix using a vectorized approach by comparing all interatomic distances
         to the sum of covalent radii (plus a tolerance).
 
-        :param tolerance: Additional margin (in Å) on top of covalent radius sums.
-                          Adjust as needed for borderline cases.
+        Parameters:
+            tolerance: Additional margin (in Å) on top of covalent radius sums.
         """
         n = len(self.atoms)
-        for i in range(n):
-            for j in range(i + 1, n):
-                dist_ij = self.distance(i, j)
-                r1 = Elements.covalent_radius(self.atoms[i].symbol, order="single")
-                r2 = Elements.covalent_radius(self.atoms[j].symbol, order="single")
-                r_sum = r1 + r2 + tolerance
+        # Compute the full pairwise distance matrix
+        dist_matrix = self.compute_distance_matrix()
 
-                if dist_ij <= r_sum:
-                    # Simple approach: call it a single bond
-                    self.bond_matrix[i, j] = 1
-                    self.bond_matrix[j, i] = 1
+        # Create an array of covalent radii for each atom (assuming single bond order)
+        radii = np.array([Elements.covalent_radius(atom.symbol, order="single") for atom in self.atoms])
+        # Build a threshold matrix: each element (i,j) is radii[i] + radii[j] + tolerance
+        threshold_matrix = radii[:, None] + radii[None, :] + tolerance
 
-                    # More advanced logic for double/triple bonds could go here
+        # A bond is present if the distance is non-zero and less than or equal to the threshold
+        self.bond_matrix = ((dist_matrix <= threshold_matrix) & (dist_matrix > 0)).astype(float)
 
     def find_fragments(self):
         """
@@ -336,7 +344,7 @@ class Molecule:
 
     def distance(self, i: int, j: int) -> float:
         r""" 
-        Returns the Euclidean distance between atoms i and j (in ang).
+        Returns the Euclidean distance between atoms i and j (in Å).
 
         $$
         d_{ij} = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2 + (z_i - z_j)^2}
@@ -352,10 +360,10 @@ class Molecule:
         If degrees=False, return radians.
 
         $$
-        \theta = \cos^{-1} \Bigl(
+        \theta = \cos^{-1} \Biggl(
             \frac{(\mathbf{r}_i - \mathbf{r}_j) \cdot (\mathbf{r}_k - \mathbf{r}_j)}
                  {\|\mathbf{r}_i - \mathbf{r}_j\| \, \|\mathbf{r}_k - \mathbf{r}_j\|}
-        \Bigr)
+        \Biggr)
         $$
         """
         r_i = np.array([self.atoms[i].x, self.atoms[i].y, self.atoms[i].z])
