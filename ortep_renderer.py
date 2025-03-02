@@ -1,7 +1,7 @@
 # ortep_renderer.py
 
-import math
-from geometry_utils import rotate_point, project_point
+import numpy as np
+from geometry_utils import rotate_points, project_points
 from elements_table import Elements
 from zobjects import ZAtom, ZSegment
 from config import ATOM_STYLE, ARC_STYLE
@@ -25,23 +25,38 @@ class ORTEP_MoleculeRenderer:
     def build_render_list(self, ortep_molecule, vp):
         render_list = []
         rotated_info = []  # List of tuples: (x_rot, y_rot, z_rot, r_eff)
+        n_atoms = len(ortep_molecule.atoms)
+        
+        if n_atoms == 0:
+            return render_list
 
-        # --- Process atoms ---
-        for atom in ortep_molecule.atoms:
-            # Rotate the atom's position.
-            x_rot, y_rot, z_rot = rotate_point(atom.x, atom.y, atom.z, vp.rx, vp.ry, vp.rz)
-            # Project to 2D screen coordinates.
-            x2d, y2d = project_point(x_rot, y_rot, z_rot, vp)
-            # Get the covalent radius (in Ångströms).
+        # --- Vectorized processing of atom positions ---
+        # Collect atom coordinates into an (n, 3) NumPy array.
+        coords = np.array([[atom.x, atom.y, atom.z] for atom in ortep_molecule.atoms])
+        
+        # Perform vectorized rotation using the angles specified in view parameters.
+        rotated_coords = rotate_points(coords, vp.rx, vp.ry, vp.rz)
+        
+        # Project all rotated coordinates onto 2D screen in one go.
+        screen_coords = project_points(rotated_coords, vp)
+
+        # Process each atom with its rotated and projected coordinates.
+        for idx, atom in enumerate(ortep_molecule.atoms):
+            x_rot, y_rot, z_rot = rotated_coords[idx]
+            # Retrieve the covalent radius in Ångströms.
             try:
                 r_covalent = Elements.covalent_radius(atom.symbol, order="single",
                                                        source="cordero", unit="Ang")
             except KeyError:
                 r_covalent = 1.0  # Fallback if unknown
+
             # Compute the drawn radius in pixels.
             px_r = max(ATOM_STYLE["min_radius"], int(r_covalent * ATOM_STYLE["scale"] * vp.scale))
             # Compute effective 3D radius for bond clipping (in Å).
             r_eff = r_covalent * ATOM_STYLE["scale"]
+
+            # Get the 2D screen coordinates from the projected results.
+            x2d, y2d = screen_coords[idx]
 
             # Create a ZAtom for drawing.
             z_atom = ZAtom(
@@ -64,8 +79,8 @@ class ORTEP_MoleculeRenderer:
                 j = ortep_molecule.atoms.index(bond.atom2)
             except ValueError:
                 continue
-            rotated_coords = (rotated_info[i], rotated_info[j])
-            segments = bond.get_segments(rotated_coords, vp)
+            bond_rotated_coords = (rotated_info[i], rotated_info[j])
+            segments = bond.get_segments(bond_rotated_coords, vp)
             for seg in segments:
                 seg.bond = bond
                 # Propagate persistent selection state from the underlying bond.
