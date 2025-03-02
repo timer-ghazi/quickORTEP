@@ -14,6 +14,7 @@ import numpy as np
 import re
 from abc import ABC, abstractmethod
 from molecule_nci import MoleculeWithNCIs  # Assumes molecule_nci.py (and molecule.py) are in the path
+from config import ENERGY_UNITS, DEFAULT_ENERGY_UNIT
 
 
 class TrajectoryParser(ABC):
@@ -195,7 +196,8 @@ class GaussianTrajectoryParser(TrajectoryParser):
         metadata = {
             'file_name': base_name,
             'format': 'gaussian',
-            'path': file_path
+            'path': file_path,
+            'energy_unit': 'hartree'  # Explicitly mark Gaussian energies as Hartrees
         }
         
         # Parse energies and geometries
@@ -487,37 +489,147 @@ class Trajectory:
             self._frame_energies[frame_index] = mol.Energy
         return self._molecule_cache[frame_index]
 
-    def energy_trajectory(self, skip_none=False):
+    def _detect_hartree_units(self):
         """
-        Return a NumPy array of energies across all frames.
+        Detect if energies are in Hartrees based on magnitude and source.
+        
+        Returns:
+            bool: True if energies are likely to be in Hartrees
+        """
+        # Check if we know the format from metadata
+        if 'format' in self.metadata:
+            # Gaussian calculations are typically in Hartrees
+            if self.metadata['format'] == 'gaussian':
+                return True
+        
+        # Check if energy_unit is explicitly set in metadata
+        if 'energy_unit' in self.metadata:
+            return self.metadata['energy_unit'].lower() == 'hartree'
+        
+        # Check if there are energy values with explicit unit info
+        if 'energy_data' in self.metadata:
+            for frame_data in self.metadata['energy_data'].values():
+                if 'type' in frame_data:
+                    # Gaussian energy types (SCF, MP2, etc.) are in Hartrees
+                    if frame_data['type'] in ['SCF', 'MP2', 'Double-Hybrid', 'External']:
+                        return True
+        
+        # Check the magnitude of energies
+        energies = np.array([e for e in self._frame_energies if e is not None])
+        if len(energies) > 0:
+            # Hartree energies for molecular systems are typically negative and of order 10^0 to 10^3
+            mean_energy = np.mean(energies)
+            if -10000 < mean_energy < 0:
+                return True
+        
+        return False
+
+    def energy_trajectory(self, skip_none=False, convert_if_hartrees=True, convert_to_unit=None):
+        """
+        Return a NumPy array of energies across all frames with optional unit conversion.
         
         Parameters:
             skip_none (bool): If True, frames with None energies will be excluded.
-                          If False, None values will be included in the array.
-            
+            convert_if_hartrees (bool): If True, will convert energies if detected as Hartrees.
+            convert_to_unit (str): Target unit for conversion (hartree, kcal_mol, kj_mol, ev).
+                          If None, uses DEFAULT_ENERGY_UNIT from config.
+        
         Returns:
-            np.ndarray: Array of energy values. If skip_none=False, may contain None values.
+            tuple: (np.ndarray, dict) where:
+                - np.ndarray is the array of energy values
+                - dict contains metadata about the conversion
         """
         # Force loading of all frames to ensure energies are populated
         for i in range(len(self._raw_frames)):
             self.get_frame(i)
         
+        # Get raw energies
         if skip_none:
-            # Filter out None values
-            return np.array([e for e in self._frame_energies if e is not None])
+            energies = np.array([e for e in self._frame_energies if e is not None])
         else:
-            # Convert None to np.nan for consistent numpy array
-            return np.array([e if e is not None else np.nan for e in self._frame_energies])
+            energies = np.array([e if e is not None else np.nan for e in self._frame_energies])
+        
+        if len(energies) == 0 or np.isnan(energies).all():
+            return energies, {'original_unit': 'unknown', 'converted_unit': 'unknown', 'normalized': False}
+        
+        # Initialize conversion metadata
+        conversion_info = {
+            'original_unit': 'unknown',
+            'converted_unit': 'unknown',
+            'normalized': False,
+            'min_energy': None,
+            'conversion_factor': 1.0
+        }
+        
+        # Detect if energies are in Hartrees
+        is_hartrees = self._detect_hartree_units()
+        
+        if is_hartrees:
+            conversion_info['original_unit'] = 'hartree'
+        elif 'energy_unit' in self.metadata:
+            conversion_info['original_unit'] = self.metadata['energy_unit']
+        
+        # Store minimum energy before any conversions
+        valid_energies = energies[~np.isnan(energies)]
+        min_energy = np.min(valid_energies)
+        conversion_info['min_energy'] = min_energy
+        
+        # Apply normalization and conversion if requested
+        if convert_if_hartrees and is_hartrees:
+            # Determine target unit
+            target_unit = convert_to_unit if convert_to_unit else DEFAULT_ENERGY_UNIT
+            
+            if target_unit in ENERGY_UNITS:
+                # Get conversion factor
+                conversion_factor = ENERGY_UNITS['hartree'][f'to_{target_unit}']
+                
+                # Apply conversion to valid values
+                mask = ~np.isnan(energies)
+                
+                # First convert to target unit
+                energies_converted = energies.copy()
+                energies_converted[mask] = energies[mask] * conversion_factor
+                
+                # Then normalize by subtracting the minimum (in the new unit)
+                min_energy_converted = min_energy * conversion_factor
+                energies_normalized = energies_converted.copy()
+                energies_normalized[mask] = energies_converted[mask] - min_energy_converted
+                
+                # Update metadata
+                conversion_info['converted_unit'] = target_unit
+                conversion_info['conversion_factor'] = conversion_factor
+                conversion_info['normalized'] = True
+                
+                # Return normalized energies
+                return energies_normalized, conversion_info
+        
+        # If we get here, just return the original energies
+        conversion_info['converted_unit'] = conversion_info['original_unit']
+        return energies, conversion_info
 
-    def print_energy_table(self):
+    def print_energy_table(self, convert_if_hartrees=True, convert_to_unit=None):
         """
         Print a table of frame numbers vs. energy.
         For each frame, the molecule is fully processed (if not already) so that
         its Energy attribute is available.
         """
-        print("Frame\tEnergy\tType\tOrientation")
+        # Get energies with conversion
+        energies, energy_info = self.energy_trajectory(
+            convert_if_hartrees=convert_if_hartrees,
+            convert_to_unit=convert_to_unit
+        )
+        
+        # Prepare header with units
+        unit_display = ENERGY_UNITS.get(
+            energy_info['converted_unit'], 
+            {'symbol': energy_info['converted_unit']}
+        )['symbol']
+        
+        normalized_str = " (rel. to min)" if energy_info['normalized'] else ""
+        
+        print(f"Frame\tEnergy ({unit_display}{normalized_str})\tType\tOrientation")
         print("----------------------------------------")
-        energies = self.energy_trajectory()
+        
         for i in range(len(self._raw_frames)):
             energy_val = energies[i]
             energy_str = f"{energy_val:.6f}" if not np.isnan(energy_val) else "N/A"
@@ -648,7 +760,7 @@ class Trajectory:
         
         return Trajectory(new_frames, metadata=merged_metadata)
 
-    def summary(self):
+    def summary(self, convert_if_hartrees=True, convert_to_unit=None):
         """
         Print summary information about the trajectory.
         """
@@ -668,11 +780,36 @@ class Trajectory:
                 if key != 'energy_data':  # Skip detailed energy data in summary
                     print(f"  {key}: {value}")
             
-        # Get energies via the new API method
-        energies = self.energy_trajectory()
+        # Get energies with unit conversion
+        energies, energy_info = self.energy_trajectory(
+            convert_if_hartrees=convert_if_hartrees,
+            convert_to_unit=convert_to_unit
+        )
+        
         valid_energies = energies[~np.isnan(energies)]
         if len(valid_energies) > 0:
-            print(f"\nEnergy range: {np.min(valid_energies):.6f} to {np.max(valid_energies):.6f}")
+            # Get unit information
+            unit_display = ENERGY_UNITS.get(
+                energy_info['converted_unit'], 
+                {'symbol': energy_info['converted_unit']}
+            )['symbol']
+            
+            normalized_str = " (relative to minimum)" if energy_info['normalized'] else ""
+            
+            print(f"\nEnergy range: {np.min(valid_energies):.6f} to {np.max(valid_energies):.6f} {unit_display}{normalized_str}")
+            
+            if energy_info['original_unit'] != energy_info['converted_unit'] and energy_info['original_unit'] != 'unknown':
+                original_unit = ENERGY_UNITS.get(
+                    energy_info['original_unit'], 
+                    {'name': energy_info['original_unit']}
+                )['name']
+                
+                converted_unit = ENERGY_UNITS.get(
+                    energy_info['converted_unit'], 
+                    {'name': energy_info['converted_unit']}
+                )['name']
+                
+                print(f"Energy conversion: {original_unit} → {converted_unit}")
             
             # Add energy type info if available
             if 'format' in self.metadata and self.metadata['format'] == 'gaussian':
@@ -701,13 +838,13 @@ def main():
         print(f"Error: {e}")
         sys.exit(1)
 
-    # Print overall summary
+    # Print overall summary with unit conversion
     print("\n--- Trajectory Summary ---")
-    traj.summary()
+    traj.summary(convert_if_hartrees=True, convert_to_unit=DEFAULT_ENERGY_UNIT)
 
-    # Print an energy vs. frame table
+    # Print an energy vs. frame table with unit conversion
     print("\n--- Energy vs. Frame ---")
-    traj.print_energy_table()
+    traj.print_energy_table(convert_if_hartrees=True, convert_to_unit=DEFAULT_ENERGY_UNIT)
 
     # Print a distance vs. frame table for atoms 0 and 1
     print("\n--- Distance vs. Frame (Atom 0 - Atom 1) ---")
@@ -718,10 +855,16 @@ def main():
     print("\nDistance array (Atom 0 - Atom 1):")
     print(distances)
 
-    # Get energy information
-    energies = traj.energy_trajectory()
+    # Get energy information with unit conversion
+    energies, energy_info = traj.energy_trajectory(
+        convert_if_hartrees=True, 
+        convert_to_unit=DEFAULT_ENERGY_UNIT
+    )
     print("\nEnergy array:")
     print(energies)
+    print(f"Units: {ENERGY_UNITS[energy_info['converted_unit']]['name']}")
+    if energy_info['normalized']:
+        print("Energies normalized relative to minimum")
 
     # If there are at least 3 atoms, print an angle trajectory
     try:
@@ -743,7 +886,7 @@ def main():
     if not traj.is_single_structure():
         print("\n--- Filter Demonstration ---")
         # Filter to frames with energy below the median (if energies are available)
-        energies = traj.energy_trajectory()
+        energies, _ = traj.energy_trajectory()
         valid_energies = energies[~np.isnan(energies)]
         if len(valid_energies) > 0:
             median_energy = np.median(valid_energies)

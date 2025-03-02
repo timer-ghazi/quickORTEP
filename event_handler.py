@@ -12,7 +12,7 @@ import time
 import numpy as np
 from Xlib import XK, X
 from bond_manager import cycle_existing_bond, toggle_bond
-from config import VIEWER_INTERACTION
+from config import VIEWER_INTERACTION, ENERGY_UNITS, DEFAULT_ENERGY_UNIT
 from x11view.svg_canvas import SVGCanvas
 
 class _EventHandler:
@@ -159,24 +159,62 @@ class _EventHandler:
                 self.viewer.message_service.log_info("Last frame")
             elif keychar == '=':
                 if self.viewer.trajectory:
-                    energies = self.viewer.trajectory.energy_trajectory()
+                    # Get energies with proper unit conversion and unpack the tuple
+                    energies, energy_info = self.viewer.trajectory.energy_trajectory(
+                        convert_if_hartrees=True, 
+                        convert_to_unit=DEFAULT_ENERGY_UNIT
+                    )
+                    
                     if len(energies) > 0 and not np.isnan(energies).all():
                         # Find index of maximum energy (ignoring NaN values)
                         max_frame = np.nanargmax(energies)
                         self.viewer.set_frame(max_frame)
+                        
+                        # Get unit symbol for display
+                        unit_symbol = ENERGY_UNITS.get(
+                            energy_info['converted_unit'], 
+                            {'symbol': 'a.u.'}
+                        )['symbol']
+                        
+                        # Display with proper units
                         self.viewer.message_service.log_info(
-                            f"Highest energy frame (E={energies[max_frame]:.4f} a.u.)"
+                            f"Highest energy frame (E={energies[max_frame]:.4f} {unit_symbol})"
                         )
             elif keychar == '-':
                 if self.viewer.trajectory:
-                    energies = self.viewer.trajectory.energy_trajectory()
+                    # Get energies with proper unit conversion and unpack the tuple
+                    energies, energy_info = self.viewer.trajectory.energy_trajectory(
+                        convert_if_hartrees=True, 
+                        convert_to_unit=DEFAULT_ENERGY_UNIT
+                    )
+                    
                     if len(energies) > 0 and not np.isnan(energies).all():
                         # Find index of minimum energy (ignoring NaN values)
                         min_frame = np.nanargmin(energies)
                         self.viewer.set_frame(min_frame)
+                        
+                        # Get unit symbol for display
+                        unit_symbol = ENERGY_UNITS.get(
+                            energy_info['converted_unit'], 
+                            {'symbol': 'a.u.'}
+                        )['symbol']
+                        
+                        # Display with proper units
                         self.viewer.message_service.log_info(
-                            f"Lowest energy frame (E={energies[min_frame]:.4f} a.u.)"
+                            f"Lowest energy frame (E={energies[min_frame]:.4f} {unit_symbol})"
                         )
+        elif keychar == 'g':
+            # Toggle grid visibility
+            self.viewer.toggle_grid()
+        elif keychar == 'c':
+            # Clear all bond edits
+            self.viewer.clear_bond_edits()
+        elif keychar == 'f':
+            # Fit molecule to window
+            self.viewer.fit_molecule_to_window()
+        elif keychar == 'r':
+            # Reset view
+            self.viewer.reset_view()
 
         self.viewer.redraw()
 

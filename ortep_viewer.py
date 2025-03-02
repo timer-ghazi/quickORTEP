@@ -19,7 +19,7 @@ from hud import HUDPanel
 from ortep_renderer import ORTEP_MoleculeRenderer
 from config import CANVAS_SETTINGS, VIEWER_INTERACTION, MINIMAL_THEME
 from config import HUD_STYLE, MESSAGE_PANEL_STYLE, MESSAGE_TYPES, GRAPH_SETTINGS
-from config import CURRENT_THEME, GRID_SETTINGS
+from config import CURRENT_THEME, GRID_SETTINGS, ENERGY_UNITS, DEFAULT_ENERGY_UNIT
 from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from message_service import MessageService
 from message_panel import MessagePanel
@@ -224,6 +224,33 @@ class MoleculeViewer(X11Window):
         
         # Reset the energy graph so it will be recreated with the new trajectory data
         self.energy_graph = None
+        
+        # Log energy unit information
+        energies, energy_info = trajectory.energy_trajectory(
+            convert_if_hartrees=True,
+            convert_to_unit=DEFAULT_ENERGY_UNIT
+        )
+        
+        if energy_info['original_unit'] != 'unknown':
+            original_unit = ENERGY_UNITS.get(
+                energy_info['original_unit'], 
+                {'name': energy_info['original_unit']}
+            )['name']
+            
+            if energy_info['converted_unit'] != 'unknown':
+                converted_unit = ENERGY_UNITS.get(
+                    energy_info['converted_unit'], 
+                    {'name': energy_info['converted_unit']}
+                )['name']
+                
+                if energy_info['normalized']:
+                    self.message_service.log_info(
+                        f"Energies: {original_unit} converted to {converted_unit} (normalized to min=0)"
+                    )
+                else:
+                    self.message_service.log_info(
+                        f"Energies: {original_unit} converted to {converted_unit}"
+                    )
 
     def calculate_bond_length_trajectory(self, atom1_idx, atom2_idx):
         """
@@ -273,15 +300,31 @@ class MoleculeViewer(X11Window):
             if self.trajectory is None:
                 return
             
-            # Get energy data using the energy_trajectory method
-            energies = self.trajectory.energy_trajectory()
+            # Get energy data using the energy_trajectory method with unit conversion
+            energies, energy_info = self.trajectory.energy_trajectory(
+                convert_if_hartrees=True,
+                convert_to_unit=DEFAULT_ENERGY_UNIT
+            )
+            
             if len(energies) == 0 or np.isnan(energies).all():
                 return
             
             # Prepare graph data
             x_values = list(range(len(energies)))
             y_values = [e if not np.isnan(e) else 0.0 for e in energies]
-            title = "Energy"
+            
+            # Get unit symbol for the title
+            unit_symbol = ENERGY_UNITS.get(
+                energy_info['converted_unit'], 
+                {'symbol': energy_info['converted_unit']}
+            )['symbol']
+            
+            # Create title with unit info
+            if energy_info['normalized']:
+                title = f"Rel. Energy ({unit_symbol})"
+            else:
+                title = f"Energy ({unit_symbol})"
+                
             y_axis_title = ""
         else:
             # Bond length graph
@@ -391,7 +434,7 @@ class MoleculeViewer(X11Window):
 
     def update_info_message(self):
         """
-        Update the HUD with current info, including bond propagation status.
+        Update the HUD with current info, including bond propagation status and energy units.
         """
         lines = []
         if self.selected_bonds:
@@ -413,12 +456,35 @@ class MoleculeViewer(X11Window):
         lines.append(f"Zoom: {self.view_params.scale:.1f}")
         lines.append(f"Frame: {self.current_frame} / {self.total_frames - 1}")
         
-        # Display energy information using energy_trajectory method
+        # Display energy information with units and method
         if self.trajectory:
-            energies = self.trajectory.energy_trajectory()
+            energies, energy_info = self.trajectory.energy_trajectory(
+                convert_if_hartrees=True,
+                convert_to_unit=DEFAULT_ENERGY_UNIT
+            )
+            
             if len(energies) > self.current_frame and not np.isnan(energies[self.current_frame]):
                 energy = energies[self.current_frame]
-                lines.append(f"Energy: {energy:.4f} a.u.")
+                
+                # Get energy unit symbol
+                unit_symbol = ENERGY_UNITS.get(
+                    energy_info['converted_unit'], 
+                    {'symbol': energy_info['converted_unit']}
+                )['symbol']
+                
+                # Get energy method if available
+                energy_method = ""
+                if ('energy_data' in self.trajectory.metadata and 
+                    self.current_frame in self.trajectory.metadata['energy_data']):
+                    method = self.trajectory.metadata['energy_data'][self.current_frame].get('type', '')
+                    if method:
+                        energy_method = f" ({method})"
+                
+                # Construct energy display string
+                if energy_info['normalized']:
+                    lines.append(f"Energy: {energy:.4f} {unit_symbol}{energy_method} (rel. to min)")
+                else:
+                    lines.append(f"Energy: {energy:.4f} {unit_symbol}{energy_method}")
         
         lines.append(f"Hydrogens: {'shown' if self.show_hydrogens else 'hidden'}")
         
@@ -438,7 +504,22 @@ class MoleculeViewer(X11Window):
             if atom1 and atom2:
                 lines.append(f"Graph: Bond length {atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}")
         else:
-            lines.append("Graph: Energy")
+            # Add unit info to the graph description
+            if self.trajectory:
+                _, energy_info = self.trajectory.energy_trajectory(
+                    convert_if_hartrees=True,
+                    convert_to_unit=DEFAULT_ENERGY_UNIT
+                )
+                unit_symbol = ENERGY_UNITS.get(
+                    energy_info['converted_unit'], 
+                    {'symbol': energy_info['converted_unit']}
+                )['symbol']
+                if energy_info['normalized']:
+                    lines.append(f"Graph: Rel. Energy ({unit_symbol})")
+                else:
+                    lines.append(f"Graph: Energy ({unit_symbol})")
+            else:
+                lines.append("Graph: Energy")
             
         self.hud_panel.update_lines(lines)
 

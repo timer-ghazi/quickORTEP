@@ -17,6 +17,7 @@ from ortep_molecule import ORTEP_Molecule, ORTEP_Atom
 from bonds import CovalentBond, NCIBond
 from ortep_viewer import MoleculeViewer
 from trajectory import Trajectory
+from config import DEFAULT_ENERGY_UNIT, ENERGY_UNITS
 
 def main():
     if len(sys.argv) < 2:
@@ -78,15 +79,41 @@ def main():
     if viewer.total_frames > 1:
         viewer.message_service.log_info(f"Trajectory contains {viewer.total_frames} frames")
         
-        # Calculate energy statistics if available using energy_trajectory
-        energies = traj.energy_trajectory()
+        # Calculate energy statistics if available using enhanced energy_trajectory
+        energies, energy_info = traj.energy_trajectory(
+            convert_if_hartrees=True,
+            convert_to_unit=DEFAULT_ENERGY_UNIT
+        )
+        
         valid_energies = energies[~np.isnan(energies)]
         if len(valid_energies) > 0:
+            # Get unit symbol
+            unit_symbol = ENERGY_UNITS.get(
+                energy_info['converted_unit'], 
+                {'symbol': energy_info['converted_unit']}
+            )['symbol']
+            
             min_e = np.min(valid_energies)
             max_e = np.max(valid_energies)
             min_idx = np.nanargmin(energies)
             max_idx = np.nanargmax(energies)
-            viewer.message_service.log_info(f"Energy range: {min_e:.4f} (frame {min_idx}) to {max_e:.4f} a.u. (frame {max_idx})")
+            
+            # Check if data has energy method information
+            method_info = ""
+            if 'energy_data' in traj.metadata:
+                energy_types = set()
+                for frame_data in traj.metadata['energy_data'].values():
+                    if 'type' in frame_data:
+                        energy_types.add(frame_data['type'])
+                if energy_types:
+                    method_info = f" ({', '.join(energy_types)})"
+            
+            # Include normalization info if applicable
+            norm_info = " (rel. to min)" if energy_info['normalized'] else ""
+            
+            viewer.message_service.log_info(
+                f"Energy range{method_info}: {min_e:.4f} (frame {min_idx}) to {max_e:.4f} {unit_symbol}{norm_info}"
+            )
     
     # Log rendering settings
     if ss_factor > 1:

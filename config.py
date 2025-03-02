@@ -204,6 +204,47 @@ CURRENT_THEME = SCIFI_THEME
 ANGSTROM_TO_PIXEL = 100
 
 # ================================
+# Energy Unit Settings
+# ================================
+ENERGY_UNITS = {
+    "hartree": {
+        "name": "Hartree",
+        "symbol": "Ha",
+        "to_hartree": 1.0,
+        "to_kcal_mol": 627.5095,
+        "to_kj_mol": 2625.5,
+        "to_ev": 27.2114
+    },
+    "kcal_mol": {
+        "name": "kcal/mol",
+        "symbol": "kcal/mol",
+        "to_hartree": 1.0 / 627.5095,
+        "to_kcal_mol": 1.0,
+        "to_kj_mol": 4.184,
+        "to_ev": 0.0433641
+    },
+    "kj_mol": {
+        "name": "kJ/mol",
+        "symbol": "kJ/mol",
+        "to_hartree": 1.0 / 2625.5,
+        "to_kcal_mol": 1.0 / 4.184,
+        "to_kj_mol": 1.0,
+        "to_ev": 0.0103642
+    },
+    "ev": {
+        "name": "eV",
+        "symbol": "eV",
+        "to_hartree": 1.0 / 27.2114,
+        "to_kcal_mol": 1.0 / 0.0433641,
+        "to_kj_mol": 1.0 / 0.0103642,
+        "to_ev": 1.0
+    }
+}
+
+# Default energy unit for display
+DEFAULT_ENERGY_UNIT = "kcal_mol"
+
+# ================================
 # Grid Settings
 # ================================
 GRID_SETTINGS = {
