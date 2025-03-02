@@ -487,6 +487,28 @@ class Trajectory:
             self._frame_energies[frame_index] = mol.Energy
         return self._molecule_cache[frame_index]
 
+    def energy_trajectory(self, skip_none=False):
+        """
+        Return a NumPy array of energies across all frames.
+        
+        Parameters:
+            skip_none (bool): If True, frames with None energies will be excluded.
+                          If False, None values will be included in the array.
+            
+        Returns:
+            np.ndarray: Array of energy values. If skip_none=False, may contain None values.
+        """
+        # Force loading of all frames to ensure energies are populated
+        for i in range(len(self._raw_frames)):
+            self.get_frame(i)
+        
+        if skip_none:
+            # Filter out None values
+            return np.array([e for e in self._frame_energies if e is not None])
+        else:
+            # Convert None to np.nan for consistent numpy array
+            return np.array([e if e is not None else np.nan for e in self._frame_energies])
+
     def print_energy_table(self):
         """
         Print a table of frame numbers vs. energy.
@@ -495,9 +517,10 @@ class Trajectory:
         """
         print("Frame\tEnergy\tType\tOrientation")
         print("----------------------------------------")
+        energies = self.energy_trajectory()
         for i in range(len(self._raw_frames)):
-            mol = self.get_frame(i)
-            energy_str = f"{mol.Energy:.6f}" if mol.Energy is not None else "N/A"
+            energy_val = energies[i]
+            energy_str = f"{energy_val:.6f}" if not np.isnan(energy_val) else "N/A"
             
             # Add energy type and orientation if available in metadata
             energy_type = "N/A"
@@ -645,14 +668,11 @@ class Trajectory:
                 if key != 'energy_data':  # Skip detailed energy data in summary
                     print(f"  {key}: {value}")
             
-        # Force processing of frames to obtain energies (if available)
-        energies = []
-        for i in range(total_frames):
-            mol = self.get_frame(i)
-            if mol.Energy is not None:
-                energies.append(mol.Energy)
-        if energies:
-            print(f"\nEnergy range: {min(energies):.6f} to {max(energies):.6f}")
+        # Get energies via the new API method
+        energies = self.energy_trajectory()
+        valid_energies = energies[~np.isnan(energies)]
+        if len(valid_energies) > 0:
+            print(f"\nEnergy range: {np.min(valid_energies):.6f} to {np.max(valid_energies):.6f}")
             
             # Add energy type info if available
             if 'format' in self.metadata and self.metadata['format'] == 'gaussian':
@@ -698,6 +718,11 @@ def main():
     print("\nDistance array (Atom 0 - Atom 1):")
     print(distances)
 
+    # Get energy information
+    energies = traj.energy_trajectory()
+    print("\nEnergy array:")
+    print(energies)
+
     # If there are at least 3 atoms, print an angle trajectory
     try:
         angles = traj.angle_trajectory(0, 1, 2)
@@ -718,10 +743,11 @@ def main():
     if not traj.is_single_structure():
         print("\n--- Filter Demonstration ---")
         # Filter to frames with energy below the median (if energies are available)
-        energies = [traj.get_frame(i).Energy for i in range(len(traj._raw_frames))]
-        if all(e is not None for e in energies):
-            median_energy = sorted(energies)[len(energies) // 2]
-            filtered = traj.filter_frames(lambda mol: mol.Energy < median_energy)
+        energies = traj.energy_trajectory()
+        valid_energies = energies[~np.isnan(energies)]
+        if len(valid_energies) > 0:
+            median_energy = np.median(valid_energies)
+            filtered = traj.filter_frames(lambda mol: mol.Energy is not None and mol.Energy < median_energy)
             print(f"Filtered trajectory has {len(filtered._raw_frames)} frames (energy < {median_energy:.6f})")
 
 

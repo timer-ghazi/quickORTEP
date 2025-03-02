@@ -9,6 +9,7 @@ commands and delegates the corresponding actions to the MoleculeViewer.
 
 import sys
 import time
+import numpy as np
 from Xlib import XK, X
 from bond_manager import cycle_existing_bond, toggle_bond
 from config import VIEWER_INTERACTION
@@ -157,27 +158,25 @@ class _EventHandler:
                 self.viewer.set_frame(self.viewer.total_frames - 1)
                 self.viewer.message_service.log_info("Last frame")
             elif keychar == '=':
-                energies = self.viewer.trajectory._frame_energies if self.viewer.trajectory else []
-                if energies and any(e is not None for e in energies):
-                    max_frame = max(
-                        range(len(energies)),
-                        key=lambda i: energies[i] if energies[i] is not None else float('-inf')
-                    )
-                    self.viewer.set_frame(max_frame)
-                    self.viewer.message_service.log_info(
-                        f"Highest energy frame (E={energies[max_frame]:.4f} a.u.)"
-                    )
+                if self.viewer.trajectory:
+                    energies = self.viewer.trajectory.energy_trajectory()
+                    if len(energies) > 0 and not np.isnan(energies).all():
+                        # Find index of maximum energy (ignoring NaN values)
+                        max_frame = np.nanargmax(energies)
+                        self.viewer.set_frame(max_frame)
+                        self.viewer.message_service.log_info(
+                            f"Highest energy frame (E={energies[max_frame]:.4f} a.u.)"
+                        )
             elif keychar == '-':
-                energies = self.viewer.trajectory._frame_energies if self.viewer.trajectory else []
-                if energies and any(e is not None for e in energies):
-                    min_frame = min(
-                        range(len(energies)),
-                        key=lambda i: energies[i] if energies[i] is not None else float('inf')
-                    )
-                    self.viewer.set_frame(min_frame)
-                    self.viewer.message_service.log_info(
-                        f"Lowest energy frame (E={energies[min_frame]:.4f} a.u.)"
-                    )
+                if self.viewer.trajectory:
+                    energies = self.viewer.trajectory.energy_trajectory()
+                    if len(energies) > 0 and not np.isnan(energies).all():
+                        # Find index of minimum energy (ignoring NaN values)
+                        min_frame = np.nanargmin(energies)
+                        self.viewer.set_frame(min_frame)
+                        self.viewer.message_service.log_info(
+                            f"Lowest energy frame (E={energies[min_frame]:.4f} a.u.)"
+                        )
 
         self.viewer.redraw()
 

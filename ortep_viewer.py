@@ -12,6 +12,7 @@ import sys
 import time
 import threading
 import math
+import numpy as np
 from Xlib import XK, X
 from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
 from hud import HUDPanel
@@ -272,14 +273,14 @@ class MoleculeViewer(X11Window):
             if self.trajectory is None:
                 return
             
-            # Check for energy data
-            energies = self.trajectory._frame_energies
-            if not energies or all(e is None for e in energies):
+            # Get energy data using the energy_trajectory method
+            energies = self.trajectory.energy_trajectory()
+            if len(energies) == 0 or np.isnan(energies).all():
                 return
             
             # Prepare graph data
             x_values = list(range(len(energies)))
-            y_values = [e if e is not None else 0.0 for e in energies]
+            y_values = [e if not np.isnan(e) else 0.0 for e in energies]
             title = "Energy"
             y_axis_title = ""
         else:
@@ -411,9 +412,14 @@ class MoleculeViewer(X11Window):
             lines.append("Click to select an atom; Shift-click to multi-select.")
         lines.append(f"Zoom: {self.view_params.scale:.1f}")
         lines.append(f"Frame: {self.current_frame} / {self.total_frames - 1}")
-        if self.trajectory and self.trajectory._frame_energies[self.current_frame] is not None:
-            energy = self.trajectory._frame_energies[self.current_frame]
-            lines.append(f"Energy: {energy:.4f} a.u.")
+        
+        # Display energy information using energy_trajectory method
+        if self.trajectory:
+            energies = self.trajectory.energy_trajectory()
+            if len(energies) > self.current_frame and not np.isnan(energies[self.current_frame]):
+                energy = energies[self.current_frame]
+                lines.append(f"Energy: {energy:.4f} a.u.")
+        
         lines.append(f"Hydrogens: {'shown' if self.show_hydrogens else 'hidden'}")
         
         # Add bond propagation status

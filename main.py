@@ -64,11 +64,7 @@ def main():
     # --- Launch the viewer with trajectory support ---
     viewer = MoleculeViewer(ortep_mol, width=700, height=700,
                               ss_factor=ss_factor, tile_size=tile_size)
-    # Pass the trajectory to the viewer.
-    # viewer.trajectory = traj
-    # viewer.current_frame = 0
-    # viewer.total_frames = len(traj._raw_frames)
-
+    
     # Pass the trajectory to the viewer using the proper method
     viewer.set_trajectory(traj)
     viewer.current_frame = 0  # This might be redundant now since set_trajectory sets total_frames
@@ -82,13 +78,14 @@ def main():
     if viewer.total_frames > 1:
         viewer.message_service.log_info(f"Trajectory contains {viewer.total_frames} frames")
         
-        # Calculate energy statistics if available
-        energies = [e for e in traj._frame_energies if e is not None]
-        if energies:
-            min_e = min(energies)
-            max_e = max(energies)
-            min_idx = traj._frame_energies.index(min_e)
-            max_idx = traj._frame_energies.index(max_e)
+        # Calculate energy statistics if available using energy_trajectory
+        energies = traj.energy_trajectory()
+        valid_energies = energies[~np.isnan(energies)]
+        if len(valid_energies) > 0:
+            min_e = np.min(valid_energies)
+            max_e = np.max(valid_energies)
+            min_idx = np.nanargmin(energies)
+            max_idx = np.nanargmax(energies)
             viewer.message_service.log_info(f"Energy range: {min_e:.4f} (frame {min_idx}) to {max_e:.4f} a.u. (frame {max_idx})")
     
     # Log rendering settings
