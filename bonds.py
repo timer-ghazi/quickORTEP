@@ -2,8 +2,9 @@
 
 from abc import ABC, abstractmethod
 import math
+import numpy as np
 from config import COVALENT_BOND, NCI_BOND, TS_BOND, DISTANCE_BOND
-from geometry_utils import project_point
+from geometry_utils import project_point  # ideally, make this vectorized if possible.
 from zobjects import ZSegment
 
 class Bond(ABC):
@@ -27,24 +28,83 @@ class Bond(ABC):
         """
         Compute the fraction along the bond where drawing should start and end.
         
-        $$ t_{start} = \\frac{r_i}{dist}, \\quad t_{end} = 1 - \\frac{r_j}{dist} $$
+        $$ t_{start} = \\frac{r_i}{\\text{dist}}, \\quad t_{end} = 1 - \\frac{r_j}{\\text{dist}} $$
         """
         t_start = r_i / dist
         t_end = 1.0 - (r_j / dist)
         return t_start, t_end
 
-    def split_into_segments(self, start_point, end_point, num_segments):
+    def _get_vectorized_segments(self, rotated_coords, view_params, bond_config, dash=False):
         """
-        Helper function to split the bond into num_segments segments.
+        Compute segments using NumPy for vectorized operations.
+        
+        Parameters:
+          rotated_coords: tuple containing ((x1, y1, z1, r_i), (x2, y2, z2, r_j))
+          view_params: view parameters (should include a 'scale' attribute)
+          bond_config: a dict (e.g., COVALENT_BOND, NCI_BOND, etc.) with keys:
+            'segment_length', 'thickness', 'color', and optionally 'thickness_factor'
+          dash: if True, only every other segment is used (for dashed bonds).
         """
+        (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
+
+        # Create NumPy arrays for the start and end points.
+        p1 = np.array([x1, y1, z1])
+        p2 = np.array([x2, y2, z2])
+        v = p2 - p1
+        dist = np.linalg.norm(v)
+        if dist < 1e-6 or (r_i + r_j >= dist):
+            return []
+
+        t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
+        visible_length = (t_end - t_start) * dist
+
+        seg_length = bond_config["segment_length"]
+        N = max(1, int(math.ceil(visible_length / seg_length)))
+        dt = (t_end - t_start) / N
+
+        # Generate an array of t values.
+        t_values = np.linspace(t_start, t_end, N + 1)
+        # Compute the segment endpoints in a vectorized fashion.
+        p1_segments = p1 + (t_values[:-1])[:, None] * v  # shape (N, 3)
+        p2_segments = p1 + (t_values[1:])[:, None] * v     # shape (N, 3)
+
+        # Compute midpoints for z-ordering.
+        z_mid = 0.5 * (p1_segments[:, 2] + p2_segments[:, 2])
+
+        # Vectorized projection:
+        # If project_point is not vectorized, use a list comprehension.
+        proj1 = np.array([project_point(x, y, z, view_params) for x, y, z in p1_segments])
+        proj2 = np.array([project_point(x, y, z, view_params) for x, y, z in p2_segments])
+        X1, Y1 = proj1[:, 0], proj1[:, 1]
+        X2, Y2 = proj2[:, 0], proj2[:, 1]
+
+        # For dashed bonds, select only even-indexed segments.
+        if dash:
+            indices = np.arange(N)[::2]
+            X1, Y1 = X1[indices], Y1[indices]
+            X2, Y2 = X2[indices], Y2[indices]
+            z_mid = z_mid[indices]
+            N = len(indices)
+
+        # Calculate the thickness in pixels.
+        thickness_factor = bond_config.get("thickness_factor", 1.0)
+        bond_thickness_px = max(1, int(bond_config["thickness"] * thickness_factor * view_params.scale))
+
         segments = []
-        dt = 1.0 / num_segments
-        for seg_index in range(num_segments):
-            t1 = seg_index * dt
-            t2 = (seg_index + 1) * dt
-            seg_start = tuple(s + (e - s) * t1 for s, e in zip(start_point, end_point))
-            seg_end = tuple(s + (e - s) * t2 for s, e in zip(start_point, end_point))
-            segments.append((seg_start, seg_end))
+        for i in range(N):
+            seg_obj = ZSegment(
+                x1=X1[i],
+                y1=Y1[i],
+                x2=X2[i],
+                y2=Y2[i],
+                z_value=z_mid[i],
+                thickness=bond_thickness_px,
+                color=bond_config["color"]
+            )
+            seg_obj.bond = self  # Attach underlying bond data.
+            segments.append(seg_obj)
+
+        self.length = dist
         return segments
 
 class CovalentBond(Bond):
@@ -52,152 +112,21 @@ class CovalentBond(Bond):
     Represents a covalent bond as a solid line.
     """
     def get_segments(self, rotated_coords, view_params):
-        (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
-
-        # Compute the vector between the atoms.
-        vx = x2 - x1
-        vy = y2 - y1
-        vz = z2 - z1
-        dist = math.sqrt(vx * vx + vy * vy + vz * vz)
-        if dist < 1e-6 or (r_i + r_j >= dist):
-            return []
-
-        t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
-        visible_length = (t_end - t_start) * dist
-
-        seg_length = COVALENT_BOND["segment_length"]
-        N = max(1, int(math.ceil(visible_length / seg_length)))
-        dt = (t_end - t_start) / N
-
-        segments = []
-        for seg_index in range(N):
-            t1 = t_start + seg_index * dt
-            t2 = t_start + (seg_index + 1) * dt
-
-            p1 = (x1 + vx * t1, y1 + vy * t1, z1 + vz * t1)
-            p2 = (x1 + vx * t2, y1 + vy * t2, z1 + vz * t2)
-            
-            X1, Y1 = project_point(*p1, view_params)
-            X2, Y2 = project_point(*p2, view_params)
-            
-            zm = 0.5 * (p1[2] + p2[2])
-            
-            bond_thickness_px = max(1, int(COVALENT_BOND["thickness"] * view_params.scale))
-            
-            seg_obj = ZSegment(
-                x1=X1, y1=Y1, x2=X2, y2=Y2,
-                z_value=zm,
-                thickness=bond_thickness_px,
-                color=COVALENT_BOND["color"]
-            )
-            # Attach underlying bond data.
-            seg_obj.bond = self
-            segments.append(seg_obj)
-        
-        self.length = dist
-        return segments
+        return self._get_vectorized_segments(rotated_coords, view_params, COVALENT_BOND)
 
 class NCIBond(Bond):
     """
     Represents a non-covalent interaction (NCI) bond as a dashed line.
     """
     def get_segments(self, rotated_coords, view_params):
-        (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
-
-        vx = x2 - x1
-        vy = y2 - y1
-        vz = z2 - z1
-        dist = math.sqrt(vx * vx + vy * vy + vz * vz)
-        if dist < 1e-6 or (r_i + r_j >= dist):
-            return []
-
-        t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
-        visible_length = (t_end - t_start) * dist
-
-        seg_length = NCI_BOND["segment_length"]
-        N = max(1, int(math.ceil(visible_length / seg_length)))
-        dt = (t_end - t_start) / N
-
-        segments = []
-        for seg_index in range(N):
-            # Skip every other segment to create a dashed effect.
-            if seg_index % 2 == 1:
-                continue
-
-            t1 = t_start + seg_index * dt
-            t2 = t_start + (seg_index + 1) * dt
-
-            p1 = (x1 + vx * t1, y1 + vy * t1, z1 + vz * t1)
-            p2 = (x1 + vx * t2, y1 + vy * t2, z1 + vz * t2)
-            
-            X1, Y1 = project_point(*p1, view_params)
-            X2, Y2 = project_point(*p2, view_params)
-            
-            zm = 0.5 * (p1[2] + p2[2])
-            
-            # Apply the thickness factor for NCI bonds.
-            thickness = NCI_BOND["thickness"] * NCI_BOND["thickness_factor"]
-            bond_thickness_px = max(1, int(thickness * view_params.scale))
-            
-            seg_obj = ZSegment(
-                x1=X1, y1=Y1, x2=X2, y2=Y2,
-                z_value=zm,
-                thickness=bond_thickness_px,
-                color=NCI_BOND["color"]
-            )
-            seg_obj.bond = self
-            segments.append(seg_obj)
-        
-        self.length = dist
-        return segments
+        return self._get_vectorized_segments(rotated_coords, view_params, NCI_BOND, dash=True)
 
 class TS_Bond(Bond):
     """
     Represents a TS bond as a solid line using the TS_BOND settings.
     """
     def get_segments(self, rotated_coords, view_params):
-        (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
-
-        vx = x2 - x1
-        vy = y2 - y1
-        vz = z2 - z1
-        dist = math.sqrt(vx * vx + vy * vy + vz * vz)
-        if dist < 1e-6 or (r_i + r_j >= dist):
-            return []
-        
-        t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
-        visible_length = (t_end - t_start) * dist
-
-        seg_length = TS_BOND["segment_length"]
-        N = max(1, int(math.ceil(visible_length / seg_length)))
-        dt = (t_end - t_start) / N
-
-        segments = []
-        for seg_index in range(N):
-            t1 = t_start + seg_index * dt
-            t2 = t_start + (seg_index + 1) * dt
-
-            p1 = (x1 + vx * t1, y1 + vy * t1, z1 + vz * t1)
-            p2 = (x1 + vx * t2, y1 + vy * t2, z1 + vz * t2)
-            
-            X1, Y1 = project_point(*p1, view_params)
-            X2, Y2 = project_point(*p2, view_params)
-            
-            zm = 0.5 * (p1[2] + p2[2])
-            
-            bond_thickness_px = max(1, int(TS_BOND["thickness"] * view_params.scale))
-            
-            seg_obj = ZSegment(
-                x1=X1, y1=Y1, x2=X2, y2=Y2,
-                z_value=zm,
-                thickness=bond_thickness_px,
-                color=TS_BOND["color"]
-            )
-            seg_obj.bond = self
-            segments.append(seg_obj)
-        
-        self.length = dist
-        return segments
+        return self._get_vectorized_segments(rotated_coords, view_params, TS_BOND)
 
 class Distance_Bond(Bond):
     """
@@ -205,45 +134,4 @@ class Distance_Bond(Bond):
     Drawn as a solid line with minimal thickness.
     """
     def get_segments(self, rotated_coords, view_params):
-        (x1, y1, z1, r_i), (x2, y2, z2, r_j) = rotated_coords
-
-        vx = x2 - x1
-        vy = y2 - y1
-        vz = z2 - z1
-        dist = math.sqrt(vx * vx + vy * vy + vz * vz)
-        if dist < 1e-6 or (r_i + r_j >= dist):
-            return []
-        
-        t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
-        visible_length = (t_end - t_start) * dist
-
-        seg_length = DISTANCE_BOND["segment_length"]
-        N = max(1, int(math.ceil(visible_length / seg_length)))
-        dt = (t_end - t_start) / N
-
-        segments = []
-        for seg_index in range(N):
-            t1 = t_start + seg_index * dt
-            t2 = t_start + (seg_index + 1) * dt
-
-            p1 = (x1 + vx * t1, y1 + vy * t1, z1 + vz * t1)
-            p2 = (x1 + vx * t2, y1 + vy * t2, z1 + vz * t2)
-            
-            X1, Y1 = project_point(*p1, view_params)
-            X2, Y2 = project_point(*p2, view_params)
-            
-            zm = 0.5 * (p1[2] + p2[2])
-            
-            bond_thickness_px = max(1, int(DISTANCE_BOND["thickness"] * view_params.scale))
-            
-            seg_obj = ZSegment(
-                x1=X1, y1=Y1, x2=X2, y2=Y2,
-                z_value=zm,
-                thickness=bond_thickness_px,
-                color=DISTANCE_BOND["color"]
-            )
-            seg_obj.bond = self
-            segments.append(seg_obj)
-        
-        self.length = dist
-        return segments
+        return self._get_vectorized_segments(rotated_coords, view_params, DISTANCE_BOND)
