@@ -319,11 +319,12 @@ class MoleculeViewer(X11Window):
                 {'symbol': energy_info['converted_unit']}
             )['symbol']
             
+            title = "Energy"
             # Create title with unit info
-            if energy_info['normalized']:
-                title = f"Rel. Energy ({unit_symbol})"
-            else:
-                title = f"Energy ({unit_symbol})"
+            #---if energy_info['normalized']:
+            #---    title = f"Energyunit_symbol})"
+            #---else:
+            #---    title = f"Energy ({unit_symbol})"
                 
             y_axis_title = ""
         else:
@@ -482,19 +483,19 @@ class MoleculeViewer(X11Window):
                 
                 # Construct energy display string
                 if energy_info['normalized']:
-                    lines.append(f"Energy: {energy:.4f} {unit_symbol}{energy_method} (rel. to min)")
+                    lines.append(f"Energy: {energy:.2f} {unit_symbol}{energy_method} (rel. to min)")
                 else:
-                    lines.append(f"Energy: {energy:.4f} {unit_symbol}{energy_method}")
+                    lines.append(f"Energy: {energy:.2f} {unit_symbol}{energy_method}")
         
         lines.append(f"Hydrogens: {'shown' if self.show_hydrogens else 'hidden'}")
         
-        # Add bond propagation status
-        prop_status = "enabled" if self.bond_edit_tracker.enabled else "disabled"
-        edit_count = self.bond_edit_tracker.get_edit_count()
-        if edit_count > 0:
-            lines.append(f"Bond propagation: {prop_status} ({edit_count} edits)")
-        else:
-            lines.append(f"Bond propagation: {prop_status}")
+        #---- # Add bond propagation status
+        #---- prop_status = "enabled" if self.bond_edit_tracker.enabled else "disabled"
+        #---- edit_count = self.bond_edit_tracker.get_edit_count()
+        #---- if edit_count > 0:
+        #----     lines.append(f"Bond propagation: {prop_status} ({edit_count} edits)")
+        #---- else:
+        #----     lines.append(f"Bond propagation: {prop_status}")
             
         # Add graph mode info
         if self.graph_mode == "bond_length" and self.selected_bond_for_graph:
