@@ -644,9 +644,26 @@ class MoleculeViewer(X11Window):
         return None
 
     def dump_svg(self):
-        filename = "quickORTEP_export.svg"
-        export_svg(self.canvas, self.renderer, self.ortep_mol, self.view_params, filename)
-        self.message_service.log_info(f"SVG export saved to {filename}")
+        """
+        Export the current view to an SVG file, with dynamic filename based on
+        the loaded trajectory file and current frame.
+        """
+        # Generate filename based on trajectory metadata
+        if self.trajectory and hasattr(self.trajectory, 'metadata'):
+            base_name = self.trajectory.metadata.get('file_name', 'quickORTEP')
+            
+            # For multi-frame files, include the frame number
+            if self.total_frames > 1:
+                # Zero-pad the frame number to 3 digits
+                frame_num = str(self.current_frame).zfill(3)
+                filename = f"{base_name}_{frame_num}.svg"
+            else:
+                filename = f"{base_name}.svg"
+        else:
+            filename = "quickORTEP_export.svg"
+        
+        export_svg(self.canvas, self.renderer, self.ortep_mol, self.view_params, 
+                   filename, self.message_service)
 
     def reset_view(self):
         self.view_params.rx = 0.0
