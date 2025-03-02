@@ -12,7 +12,10 @@ SCIFI_THEME = {
     "default_line_color": (0, 179, 136),    # Medium teal for lines
 
     # Bond colors
-    "covalent_bond_color": (0, 255, 170),   # Bright cyan for primary bonds
+ #   "covalent_bond_color": (0, 255, 170),   # Bright cyan for primary bonds
+ #   "covalent_bond_color": (68, 221, 204),   # Cyan for normal messages
+    "covalent_bond_color": (54, 177, 163),   # Darker cyan
+
     "nci_bond_color": (0, 179, 136),        # Medium teal for non-covalent
     "ts_bond_color": (68, 221, 170),        # Teal-cyan for TS bonds
     "distance_bond_color": (100, 255, 200), # Light cyan for distance
