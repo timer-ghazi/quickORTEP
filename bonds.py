@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import math
 import numpy as np
 from config import COVALENT_BOND, NCI_BOND, TS_BOND, DISTANCE_BOND
-from geometry_utils import project_point  # ideally, make this vectorized if possible.
+from geometry_utils import project_point, project_points
 from zobjects import ZSegment
 
 class Bond(ABC):
@@ -72,9 +72,9 @@ class Bond(ABC):
         z_mid = 0.5 * (p1_segments[:, 2] + p2_segments[:, 2])
 
         # Vectorized projection:
-        # If project_point is not vectorized, use a list comprehension.
-        proj1 = np.array([project_point(x, y, z, view_params) for x, y, z in p1_segments])
-        proj2 = np.array([project_point(x, y, z, view_params) for x, y, z in p2_segments])
+        # Use the vectorized project_points function instead of list comprehension
+        proj1 = project_points(p1_segments, view_params)
+        proj2 = project_points(p2_segments, view_params)
         X1, Y1 = proj1[:, 0], proj1[:, 1]
         X2, Y2 = proj2[:, 0], proj2[:, 1]
 
