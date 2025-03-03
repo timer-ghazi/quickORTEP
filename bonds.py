@@ -71,8 +71,8 @@ class Bond(ABC):
         # Compute midpoints for z-ordering.
         z_mid = 0.5 * (p1_segments[:, 2] + p2_segments[:, 2])
 
-        # Vectorized projection:
-        # Use the vectorized project_points function instead of list comprehension
+        # Use vectorized projection:
+        # Rather than using a list comprehension, use the vectorized project_points function
         proj1 = project_points(p1_segments, view_params)
         proj2 = project_points(p2_segments, view_params)
         X1, Y1 = proj1[:, 0], proj1[:, 1]
