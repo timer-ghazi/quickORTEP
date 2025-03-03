@@ -44,6 +44,24 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
             width=self.width,
             height=self.height
         )
+        
+        # Initialize font cache
+        self.font_cache = {}
+        
+        # Pre-load commonly used fonts
+        self.default_font = None
+        common_fonts = [
+            "9x15",  # Common X11 font that's available on most systems
+            "-misc-fixed-medium-r-normal--13-120-75-75-c-70-iso8859-1"  # Fallback
+        ]
+        
+        # Try to load at least one default font
+        for font_name in common_fonts:
+            try:
+                self.default_font = self.display.open_font(font_name)
+                break
+            except (xerror.BadName, xerror.BadFont):
+                pass
 
     def create_or_resize(self, width: int, height: int) -> None:
         """
@@ -274,16 +292,17 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
         self.pixmap.poly_fill_rectangle(gc, [(x, y, width, height)])
 
     # -----------------------------------------------------------
-    # New: Text drawing
+    # Improved: Text drawing with font caching
     # -----------------------------------------------------------
 
     def draw_text(self, x, y, text, color=(0, 0, 0), font_size=12,
                   font_candidates=None):
         """
         Draw text so that (x, y) is the text's baseline in X11.
+        Uses font caching to avoid repeated X server round-trips.
         If font_candidates is provided, it should be a list of font strings
         (core X11 font names). We try each in order until one works.
-        If none work, we use a hardcoded fallback.
+        If none work, we use a hardcoded fallback or pre-loaded default.
         """
         gc = self.get_gc(
             color=color,
@@ -292,36 +311,54 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
             fill_style=False
         )
     
+        # If we have a pre-loaded default font and no specific candidates requested,
+        # use the default font directly
+        if not font_candidates and self.default_font is not None:
+            gc.change(font=self.default_font.id)
+            self.pixmap.draw_text(gc, x, y, text)
+            return
+    
+        # Otherwise, proceed with font selection but use caching
         fallback_font_str = "-misc-fixed-medium-r-normal--13-120-75-75-c-70-iso8859-1"
         if not font_candidates:
             font_candidates = [fallback_font_str]
     
-        chosen_font_str = None
-        chosen_font_obj = None
+        # Create a hashable cache key
+        cache_key = tuple(font_candidates)  # Font size isn't used in X11 direct mode
     
-        for font_str in font_candidates:
-            try:
-                font_obj = self.display.open_font(font_str)
-                chosen_font_str = font_str
-                chosen_font_obj = font_obj
-                break
-            except (xerror.BadName, xerror.BadFont):
-                # Could not open this font name
-                pass
+        # Check if we already have this font cached
+        if cache_key in self.font_cache:
+            font_obj = self.font_cache[cache_key]
+            if font_obj is not None:
+                gc.change(font=font_obj.id)
+        else:
+            # Not cached - need to try loading fonts
+            font_obj = None
+            for font_str in font_candidates:
+                try:
+                    font_obj = self.display.open_font(font_str)
+                    break
+                except (xerror.BadName, xerror.BadFont):
+                    # Could not open this font name
+                    pass
     
-        if chosen_font_obj is None:
-            # Attempt the fallback
-            try:
-                chosen_font_obj = self.display.open_font(fallback_font_str)
-            except:
-                # If we fail here as well, nothing left to do; proceed with no font
-                pass
+            if font_obj is None and self.default_font is not None:
+                # Use pre-loaded default if all candidates failed
+                font_obj = self.default_font
+            elif font_obj is None:
+                # Try the fallback if no default is available
+                try:
+                    font_obj = self.display.open_font(fallback_font_str)
+                except:
+                    # If we fail here as well, proceed with whatever X11 defaults to
+                    pass
     
-        if chosen_font_obj is not None:
-            # **Extract the numeric ID** from the resource object
-            gc.change(font=chosen_font_obj.id)
+            # Cache the result (even if None, to avoid repeated attempts)
+            self.font_cache[cache_key] = font_obj
     
-        # If we reach here with no loaded font, the text call might do nothing or fail.
-        # If you want to guard, you can check chosen_font_obj is not None.
+            # Set the font if we found one
+            if font_obj is not None:
+                gc.change(font=font_obj.id)
     
+        # Draw the text (will use whatever font we successfully set, or X11's default)
         self.pixmap.draw_text(gc, x, y, text)

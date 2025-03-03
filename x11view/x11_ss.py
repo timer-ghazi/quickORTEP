@@ -97,6 +97,9 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
         self.ss_image = Image.new("RGB", (self.ss_width, self.ss_height), 
                                   tuple(self.background_color))
         self.ss_draw = ImageDraw.Draw(self.ss_image)
+        
+        # Font cache for PIL fonts
+        self.pil_font_cache = {}
 
     def set_background_color(self, color):
         """
@@ -370,15 +373,15 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
         """
         Draw text so that (x, y) corresponds to the text baseline (similar to x11_basic).
         We'll scale coordinates and font size by ss_factor for the high-res image.
+        Uses font caching to avoid repeatedly loading the same font.
         
         :param x:             X-position in window coords (baseline)
         :param y:             Y-position in window coords (baseline)
         :param text:          The string to draw
         :param color:         (R, G, B) text color in [0..255]
         :param font_size:     Approximate font size in "normal" pixels
-        :param font_candidates: A list of possible TTF paths to try, or None
+        :param font_candidates: A list of possible TTF paths to try, or None (ignored)
         """
-
         # -- 1) Multiply coords by ss_factor to get high-res positions
         ss_x = x * self.ss_factor
         ss_y = y * self.ss_factor
@@ -386,28 +389,13 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
         # -- 2) Multiply font_size by ss_factor to maintain correct scaling
         ss_font_size = int(font_size * self.ss_factor)
 
-        # -- 3) Determine which TTF file to load
-        # If the user gave font_candidates, we try them in order.
-        # Otherwise, or if all fail, we use "DejaVuSansMono.ttf".
-        ### if font_candidates is None or len(font_candidates) == 0:
-        ###     font_candidates = ["DejaVuSansMono.ttf"]
-
-        pil_font = load_embedded_ttf_font(ss_font_size)
-        #### for candidate in font_candidates:
-        ####     try:
-        ####         pil_font = ImageFont.truetype(candidate, ss_font_size)
-        ####         break  # Successfully loaded
-        ####     except OSError:
-        ####         # We'll keep trying the next candidate
-        ####         pass
-
-        #### if pil_font is None:
-        ####     # If we still have nothing, try the hard-coded DejaVuSansMono
-        ####     try:
-        ####         pil_font = ImageFont.truetype("DejaVuSansMono.ttf", ss_font_size)
-        ####     except OSError:
-        ####         # As an absolute fallback, use the default Pillow font
-        ####         pil_font = ImageFont.load_default()
+        # -- 3) Get font from cache or load it
+        if ss_font_size in self.pil_font_cache:
+            pil_font = self.pil_font_cache[ss_font_size]
+        else:
+            # Load and cache the font for this size
+            pil_font = load_embedded_ttf_font(ss_font_size)
+            self.pil_font_cache[ss_font_size] = pil_font
 
         # -- 4) Baseline adjustment:
         # Pillow's text() method interprets (x, y) as the top-left corner.
