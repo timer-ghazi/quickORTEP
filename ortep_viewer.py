@@ -10,7 +10,6 @@ It also supports bond propagation across trajectory frames.
 
 import sys
 import time
-import threading
 import math
 import numpy as np
 from Xlib import XK, X
@@ -102,8 +101,6 @@ class MoleculeViewer(X11Window):
         
         self.message_service.log_info(f"Viewer initialized ({width}x{height})")
 
-        # Drawing lock to ensure thread safety.
-        self.draw_lock = threading.Lock()
 
         # Mouse state.
         self.last_mouse_x = None
@@ -577,35 +574,34 @@ class MoleculeViewer(X11Window):
         self.redraw()
 
     def redraw(self):
-        with self.draw_lock:
-            # Check if window has been resized
-            if self._last_canvas_width != self.canvas.width or self._last_canvas_height != self.canvas.height:
-                # Window was resized, update stored dimensions
-                self._last_canvas_width = self.canvas.width
-                self._last_canvas_height = self.canvas.height
-                # Make sure graph position is updated on next ensure_energy_graph call
-                if self.energy_graph is not None:
-                    # We'll update the position when ensure_energy_graph is called
-                    pass
-            
-            self.canvas.clear()
-            
-            # Draw the grid if enabled in the current theme
-            self.draw_grid()
-            
-            self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
-            
-            # Ensure the energy graph is initialized if needed and positioned correctly
-            self.ensure_energy_graph()
-            
-            # Draw the energy graph if it exists
+        # Check if window has been resized
+        if self._last_canvas_width != self.canvas.width or self._last_canvas_height != self.canvas.height:
+            # Window was resized, update stored dimensions
+            self._last_canvas_width = self.canvas.width
+            self._last_canvas_height = self.canvas.height
+            # Make sure graph position is updated on next ensure_energy_graph call
             if self.energy_graph is not None:
-                self.energy_graph.draw_graph()
-                
-            self.update_info_message()
-            self.hud_panel.draw(self.canvas)
-            self.message_panel.draw(self.canvas)
-            self.canvas.flush()
+                # We'll update the position when ensure_energy_graph is called
+                pass
+        
+        self.canvas.clear()
+        
+        # Draw the grid if enabled in the current theme
+        self.draw_grid()
+        
+        self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
+        
+        # Ensure the energy graph is initialized if needed and positioned correctly
+        self.ensure_energy_graph()
+        
+        # Draw the energy graph if it exists
+        if self.energy_graph is not None:
+            self.energy_graph.draw_graph()
+            
+        self.update_info_message()
+        self.hud_panel.draw(self.canvas)
+        self.message_panel.draw(self.canvas)
+        self.canvas.flush()
 
     def fit_molecule_to_window(self):
         from geometry_utils import rotate_point
