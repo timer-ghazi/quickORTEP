@@ -51,8 +51,11 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
         # Pre-load commonly used fonts
         self.default_font = None
         common_fonts = [
-            "9x15",  # Common X11 font that's available on most systems
-            "-misc-fixed-medium-r-normal--13-120-75-75-c-70-iso8859-1"  # Fallback
+            "6x13",  # Smaller font, common on X11 systems
+            "8x13",  # Alternative smaller font
+            "-misc-fixed-medium-r-normal--10-100-75-75-c-60-iso8859-1",  # Smaller misc-fixed
+            "9x15",  # Larger font as fallback
+            "-misc-fixed-medium-r-normal--13-120-75-75-c-70-iso8859-1"  # Final fallback
         ]
         
         # Try to load at least one default font
