@@ -458,3 +458,48 @@ class X11CanvasSS(X11CanvasBase, X11CanvasCommon):
             outline=None,
             fill=color
         )
+        
+    def draw_triangle(self,
+                     x1: int, y1: int,
+                     x2: int, y2: int,
+                     x3: int, y3: int,
+                     color=(0, 0, 0),
+                     thickness=2) -> None:
+        """
+        Draw an unfilled triangle in the high-resolution space.
+        """
+        # Scale coordinates and thickness for supersampling
+        ss_x1 = x1 * self.ss_factor
+        ss_y1 = y1 * self.ss_factor
+        ss_x2 = x2 * self.ss_factor
+        ss_y2 = y2 * self.ss_factor
+        ss_x3 = x3 * self.ss_factor
+        ss_y3 = y3 * self.ss_factor
+        ss_thick = thickness * self.ss_factor
+        
+        # Draw the three edges of the triangle
+        self.ss_draw.line([(ss_x1, ss_y1), (ss_x2, ss_y2)], fill=color, width=ss_thick)
+        self.ss_draw.line([(ss_x2, ss_y2), (ss_x3, ss_y3)], fill=color, width=ss_thick)
+        self.ss_draw.line([(ss_x3, ss_y3), (ss_x1, ss_y1)], fill=color, width=ss_thick)
+
+    def draw_filled_triangle(self,
+                            x1: int, y1: int,
+                            x2: int, y2: int,
+                            x3: int, y3: int,
+                            color=(0, 0, 0)) -> None:
+        """
+        Draw a filled triangle in the high-resolution space.
+        """
+        # Scale coordinates for supersampling
+        ss_x1 = x1 * self.ss_factor
+        ss_y1 = y1 * self.ss_factor
+        ss_x2 = x2 * self.ss_factor
+        ss_y2 = y2 * self.ss_factor
+        ss_x3 = x3 * self.ss_factor
+        ss_y3 = y3 * self.ss_factor
+        
+        # Draw filled polygon with Pillow
+        self.ss_draw.polygon(
+            [(ss_x1, ss_y1), (ss_x2, ss_y2), (ss_x3, ss_y3)],
+            fill=color
+        )

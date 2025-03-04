@@ -163,50 +163,36 @@ class ZArrowHead(ZObject):
     def draw(self, canvas):
         """
         Draw the arrowhead on the canvas.
-        
-        If filled=True, draws a polygon (if supported) or a series of lines to approximate
-        a filled triangle. If filled=False, draws just the outline.
         """
-        # If the canvas supports drawing filled polygons, use that
-        if hasattr(canvas, 'draw_filled_polygon'):
-            if self.filled:
-                # Draw as a filled polygon
-                canvas.draw_filled_polygon(
-                    [(self.tip_x, self.tip_y), 
-                     (self.corner1_x, self.corner1_y),
-                     (self.corner2_x, self.corner2_y)],
-                    color=self.color
-                )
-            else:
-                # Draw just the outline
-                canvas.draw_line(self.tip_x, self.tip_y, self.corner1_x, self.corner1_y,
-                              thickness=self.thickness, color=self.color)
-                canvas.draw_line(self.tip_x, self.tip_y, self.corner2_x, self.corner2_y,
-                              thickness=self.thickness, color=self.color)
-                canvas.draw_line(self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y,
-                              thickness=self.thickness, color=self.color)
+        # Use the new triangle drawing methods
+        if self.filled:
+            # Draw as a filled triangle
+            canvas.draw_filled_triangle(
+                self.tip_x, self.tip_y,
+                self.corner1_x, self.corner1_y,
+                self.corner2_x, self.corner2_y,
+                color=self.color
+            )
         else:
-            # If no polygon support, draw as three lines
-            canvas.draw_line(self.tip_x, self.tip_y, self.corner1_x, self.corner1_y,
-                         thickness=self.thickness, color=self.color)
-            canvas.draw_line(self.tip_x, self.tip_y, self.corner2_x, self.corner2_y,
-                         thickness=self.thickness, color=self.color)
-            
-            if self.filled:
-                # For filled mode, connect the base corners
-                canvas.draw_line(self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y,
-                             thickness=self.thickness, color=self.color)
+            # Draw as an outline triangle
+            canvas.draw_triangle(
+                self.tip_x, self.tip_y,
+                self.corner1_x, self.corner1_y,
+                self.corner2_x, self.corner2_y,
+                color=self.color,
+                thickness=self.thickness
+            )
         
         # Draw highlight if selected
         if self.selected:
             highlight_thickness = self.thickness + HIGHLIGHT["thickness_delta"]
-            canvas.draw_line(self.tip_x, self.tip_y, self.corner1_x, self.corner1_y,
-                         thickness=highlight_thickness, color=HIGHLIGHT["color"])
-            canvas.draw_line(self.tip_x, self.tip_y, self.corner2_x, self.corner2_y,
-                         thickness=highlight_thickness, color=HIGHLIGHT["color"])
-            if self.filled:
-                canvas.draw_line(self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y,
-                             thickness=highlight_thickness, color=HIGHLIGHT["color"])
+            canvas.draw_triangle(
+                self.tip_x, self.tip_y,
+                self.corner1_x, self.corner1_y,
+                self.corner2_x, self.corner2_y,
+                color=HIGHLIGHT["color"],
+                thickness=highlight_thickness
+            )
 
     def contains(self, x, y, tolerance=3):
         """

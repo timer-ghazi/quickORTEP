@@ -231,3 +231,37 @@ class X11CanvasBase(ABC):
                          color: tuple[int, int, int] = (0, 0, 0)
                          ) -> None:
         pass
+
+    @abstractmethod
+    def draw_triangle(self,
+                      x1: int, y1: int,
+                      x2: int, y2: int,
+                      x3: int, y3: int,
+                      color: tuple[int, int, int] = (0, 0, 0),
+                      thickness: int = 2) -> None:
+        """
+        Draw an unfilled triangle with vertices at (x1,y1), (x2,y2), and (x3,y3).
+
+        :param x1, y1: First vertex coordinates
+        :param x2, y2: Second vertex coordinates
+        :param x3, y3: Third vertex coordinates
+        :param color: (R, G, B) tuple, each component 0..255
+        :param thickness: Line thickness in pixels
+        """
+        pass
+
+    @abstractmethod
+    def draw_filled_triangle(self,
+                            x1: int, y1: int,
+                            x2: int, y2: int,
+                            x3: int, y3: int,
+                            color: tuple[int, int, int] = (0, 0, 0)) -> None:
+        """
+        Draw a filled triangle with vertices at (x1,y1), (x2,y2), and (x3,y3).
+
+        :param x1, y1: First vertex coordinates
+        :param x2, y2: Second vertex coordinates
+        :param x3, y3: Third vertex coordinates
+        :param color: (R, G, B) tuple, each component 0..255
+        """
+        pass

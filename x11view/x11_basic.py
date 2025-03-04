@@ -269,7 +269,7 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
 
 
     # -----------------------------------------------------------
-    # New: Rectangle border
+    # Rectangle border
     # -----------------------------------------------------------
     def draw_rect(self, x, y, width, height, color=(0, 0, 0), thickness=2):
         gc = self.get_gc(
@@ -282,7 +282,7 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
         self.pixmap.rectangle(gc, x, y, width, height)
 
     # -----------------------------------------------------------
-    # New: Filled rectangle
+    # Filled rectangle
     # -----------------------------------------------------------
     def draw_filled_rect(self, x, y, width, height, color=(0, 0, 0)):
         gc = self.get_gc(
@@ -293,6 +293,58 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
         )
         # Fill a single rectangle
         self.pixmap.poly_fill_rectangle(gc, [(x, y, width, height)])
+        
+    # -----------------------------------------------------------
+    # Triangle border
+    # -----------------------------------------------------------
+    def draw_triangle(self,
+                     x1: int, y1: int,
+                     x2: int, y2: int,
+                     x3: int, y3: int,
+                     color=(0, 0, 0),
+                     thickness=2) -> None:
+        """
+        Draw an unfilled triangle by connecting three points with lines.
+        """
+        gc = self.get_gc(
+            color=color,
+            thickness=thickness,
+            line_style=X.LineSolid,
+            fill_style=False
+        )
+        
+        # Create a closed path using X11's poly_line
+        self.pixmap.poly_line(
+            gc,
+            X.CoordModeOrigin,
+            [(x1, y1), (x2, y2), (x3, y3), (x1, y1)]  # Close the path by repeating first point
+        )
+
+    # -----------------------------------------------------------
+    # Filled triangle
+    # -----------------------------------------------------------
+    def draw_filled_triangle(self,
+                            x1: int, y1: int,
+                            x2: int, y2: int,
+                            x3: int, y3: int,
+                            color=(0, 0, 0)) -> None:
+        """
+        Draw a filled triangle using X11's fill_poly.
+        """
+        gc = self.get_gc(
+            color=color,
+            thickness=1,
+            line_style=X.LineSolid,
+            fill_style=True
+        )
+        
+        # Use fill_poly to create a filled triangle
+        self.pixmap.fill_poly(
+            gc,
+            X.CoordModeOrigin,  # Coordinates are absolute
+            X.Convex,           # We know it's a convex shape (triangle)
+            [(x1, y1), (x2, y2), (x3, y3)]
+        )
 
     # -----------------------------------------------------------
     # Improved: Text drawing with font caching

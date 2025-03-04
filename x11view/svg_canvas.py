@@ -260,6 +260,40 @@ class SVGCanvas:
         )
         self.svg_data.append(line_elem)
 
+    def draw_triangle(self,
+                     x1, y1,
+                     x2, y2,
+                     x3, y3,
+                     color=(0, 0, 0),
+                     thickness=2):
+        """
+        Draw an unfilled triangle in SVG.
+        """
+        col = self.rgb_to_hex(color)
+        points = f"{x1},{y1} {x2},{y2} {x3},{y3}"
+        
+        polygon_elem = (
+            f'<polygon points="{points}" '
+            f'fill="none" '
+            f'stroke="{col}" '
+            f'stroke-width="{thickness}" '
+            f'stroke-linejoin="round" />'
+        )
+        self.svg_data.append(polygon_elem)
+
+    def draw_filled_triangle(self,
+                            x1, y1,
+                            x2, y2,
+                            x3, y3,
+                            color=(0, 0, 0)):
+        """
+        Draw a filled triangle in SVG.
+        """
+        col = self.rgb_to_hex(color)
+        points = f"{x1},{y1} {x2},{y2} {x3},{y3}"
+        
+        polygon_elem = f'<polygon points="{points}" fill="{col}" stroke="none" />'
+        self.svg_data.append(polygon_elem)
     
     def flush(self, filename=None):
         """Finish the SVG document and either return the SVG string or write it to a file."""
