@@ -43,8 +43,11 @@ SCIFI_THEME = {
     "show_grid": True,                      # Show grid by default
 #    "grid_major_color": (5, 16, 21),       # #051015 almost invisible
 #    "grid_major_color": (10, 61, 77),      # #071f28 
-    "grid_major_color": (6, 24, 31),      # #06181f
-    "grid_minor_color": (5, 16, 21),       #  #051015 almost invisible
+    "grid_major_color": (6, 24, 31),        # #06181f
+    "grid_minor_color": (5, 16, 21),        # #051015 almost invisible
+    
+    # Axes visibility
+    "show_axes": False,                     # Hide axes by default
 }
 
 # Light theme (default, white background)
@@ -82,6 +85,9 @@ LIGHT_THEME = {
     "show_grid": False,                     # Hide grid by default
     "grid_major_color": (200, 200, 200),    # Light gray for major grid lines
     "grid_minor_color": (220, 220, 220),    # Lighter gray for minor grid lines
+    
+    # Axes visibility
+    "show_axes": False,                     # Hide axes by default
 }
 
 # Dark theme (black background)
@@ -119,6 +125,9 @@ DARK_THEME = {
     "show_grid": True,                      # Show grid by default
     "grid_major_color": (10, 61, 77),       # #0a3d4d - very dark teal/blue-green
     "grid_minor_color": (15, 71, 87),       # Slightly lighter shade for minor lines
+    
+    # Axes visibility
+    "show_axes": False,                     # Hide axes by default
 }
 
 # Print-optimized theme (for SVG export)
@@ -156,6 +165,9 @@ PRINT_THEME = {
     "show_grid": True,                      # Show grid by default
     "grid_major_color": (220, 220, 220),    # Light gray for major grid lines
     "grid_minor_color": (235, 235, 235),    # Lighter gray for minor grid lines
+    
+    # Axes visibility
+    "show_axes": False,                     # Hide axes by default
 }
 
 # Matrix theme (green-on-black cyberpunk aesthetic)
@@ -193,6 +205,9 @@ MATRIX_THEME = {
     "show_grid": True,                      # Show grid by default
     "grid_major_color": (0, 30, 0),         # Dark green for major grid lines
     "grid_minor_color": (0, 20, 0),         # Darker green for minor grid lines
+    
+    # Axes visibility
+    "show_axes": False,                     # Hide axes by default
 }
 
 # Options: LIGHT_THEME, DARK_THEME, PRINT_THEME
@@ -355,6 +370,63 @@ DISTANCE_BOND = {
 }
 
 # ================================
+# Vector Visualization Settings
+# ================================
+VECTOR_STYLE = {
+    # Vector shaft thickness in Ångströms
+    "thickness": 0.05,
+    
+    # Vector segment length in Ångströms (for Z-ordering)
+    "segment_length": 0.22,
+    
+    # Default color for vectors (can be overridden per vector)
+    "color": CURRENT_THEME["default_line_color"],
+    
+    # Minimum thickness in pixels
+    "min_thickness_px": 1,
+    
+    # Arrowhead settings
+    "arrowhead": {
+        # Length of arrowhead in Ångströms
+        "length": 0.3,
+        
+        # Width of arrowhead as a ratio of its length
+        "width_ratio": 0.6,
+        
+        # Whether arrowhead should be filled (True) or outline only (False)
+        "filled": True,
+        
+        # Color for arrowhead (None = same as vector shaft)
+        "color": None
+    }
+}
+
+# ================================
+# Coordinate Axes Settings
+# ================================
+AXES_STYLE = {
+    # Length of each axis in Ångströms
+    "length": 2.0,
+    
+    # Colors for X, Y, Z axes
+    "x_color": (255, 0, 0),    # Red
+    "y_color": (0, 255, 0),    # Green
+    "z_color": (0, 0, 255),    # Blue
+    
+    # Thickness multiplier compared to VECTOR_STYLE["thickness"]
+    "thickness_multiplier": 1.2,
+    
+    # Show labels (X, Y, Z) at the end of each axis
+    "show_labels": True,
+    
+    # Font size for labels
+    "label_font_size": 12,
+    
+    # Distance of label from axis end in Ångströms
+    "label_offset": 0.2
+}
+
+# ================================
 # Highlighting Settings
 # ================================
 HIGHLIGHT = {
@@ -383,6 +455,9 @@ VIEWER_INTERACTION = {
     
     # Sensitivity for mouse-driven rotation.
     "mouse_rotation_sensitivity": 0.5,
+    
+    # Key to toggle axes visibility
+    "axes_toggle_key": "a",
 }
 
 # ================================

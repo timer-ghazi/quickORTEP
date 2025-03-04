@@ -125,7 +125,9 @@ class MoleculeViewer(X11Window):
         self.graph_mode = "energy"  # Options: "energy", "bond_length"
         self.selected_bond_for_graph = None  # Will store the bond ID for graph (atom1_idx, atom2_idx)
 
+        # Display options
         self.show_hydrogens = True
+        self.show_axes = CURRENT_THEME.get("show_axes", False)  # Initialize from theme
 
         # Initialize helper modules.
         self._selection_manager = _SelectionManager()
@@ -134,6 +136,10 @@ class MoleculeViewer(X11Window):
 
         # Initialize bond edit tracker for propagating bond changes across frames
         self.bond_edit_tracker = BondEditTracker()
+        
+        # Initialize coordinate axes if enabled
+        if self.show_axes:
+            self.ortep_mol.create_coordinate_axes()
 
     def draw_grid(self):
         """
@@ -428,6 +434,10 @@ class MoleculeViewer(X11Window):
                 self.selected_bond_for_graph = None
                 self.energy_graph = None  # Force recreation
 
+        # Recreate coordinate axes if they should be shown
+        if self.show_axes:
+            self.ortep_mol.create_coordinate_axes()
+
         self.redraw()
 
     def update_info_message(self):
@@ -484,7 +494,11 @@ class MoleculeViewer(X11Window):
                 else:
                     lines.append(f"Energy: {energy:.2f} {unit_symbol}{energy_method}")
         
-        lines.append(f"Hydrogens: {'shown' if self.show_hydrogens else 'hidden'}")
+        # Add display options status
+        display_options = []
+        display_options.append("H" if self.show_hydrogens else "no H")
+        display_options.append("axes" if self.show_axes else "no axes")
+        lines.append(f"Display: {', '.join(display_options)}")
         
         #---- # Add bond propagation status
         #---- prop_status = "enabled" if self.bond_edit_tracker.enabled else "disabled"
@@ -518,6 +532,9 @@ class MoleculeViewer(X11Window):
                     lines.append(f"Graph: Energy ({unit_symbol})")
             else:
                 lines.append("Graph: Energy")
+        
+        # Add key bindings help
+        lines.append("Press 'a' to toggle axes, 'd' to toggle hydrogens")
             
         self.hud_panel.update_lines(lines)
 
@@ -571,6 +588,22 @@ class MoleculeViewer(X11Window):
         
         status = "enabled" if CURRENT_THEME["show_grid"] else "disabled"
         self.message_service.log_info(f"Grid {status}")
+        self.redraw()
+        
+    def toggle_axes(self):
+        """
+        Toggle the coordinate axes visibility.
+        """
+        self.show_axes = not self.show_axes
+        
+        # Update molecule
+        if self.show_axes:
+            self.ortep_mol.create_coordinate_axes()
+            self.message_service.log_info("Coordinate axes enabled")
+        else:
+            self.ortep_mol.toggle_coordinate_axes(False)
+            self.message_service.log_info("Coordinate axes disabled")
+        
         self.redraw()
 
     def redraw(self):

@@ -1,6 +1,6 @@
 # zobjects.py
 
-from config import ARC_STYLE, HIGHLIGHT, ATOM_STYLE
+from config import ARC_STYLE, HIGHLIGHT, ATOM_STYLE, VECTOR_STYLE
 
 class ZObject:
     """
@@ -83,6 +83,7 @@ class ZSegment(ZObject):
         self.thickness = thickness
         self.color = color
         self.bond = None  # Underlying bond instance
+        self.vector = None  # Underlying vector instance (for vector segments)
 
     def draw(self, canvas):
         # Draw the bond segment.
@@ -124,3 +125,151 @@ class ZSegment(ZObject):
         dist_sq = (x - cx)**2 + (y - cy)**2
         effective_tolerance = tolerance + self.thickness / 2
         return dist_sq <= effective_tolerance**2
+
+
+class ZArrowHead(ZObject):
+    """
+    Represents a triangular arrowhead in 2D with a single z_value.
+    
+    The arrowhead is defined by three points: the tip and two base corners.
+    An optional reference to the underlying vector data is stored in self.vector.
+    """
+    def __init__(self, tip_x, tip_y, corner1_x, corner1_y, corner2_x, corner2_y, 
+                 z_value, color=(0, 0, 0), filled=True):
+        """
+        Initialize an arrowhead with the given tip and corner points.
+        
+        Parameters:
+            tip_x, tip_y: The coordinates of the arrowhead tip
+            corner1_x, corner1_y: The coordinates of the first base corner
+            corner2_x, corner2_y: The coordinates of the second base corner
+            z_value: The depth for z-ordering
+            color: The color of the arrowhead
+            filled: Whether to draw a filled triangle (True) or just an outline (False)
+        """
+        super().__init__(z_value)
+        self.tip_x = tip_x
+        self.tip_y = tip_y
+        self.corner1_x = corner1_x
+        self.corner1_y = corner1_y
+        self.corner2_x = corner2_x
+        self.corner2_y = corner2_y
+        self.color = color
+        self.filled = filled
+        self.thickness = max(VECTOR_STYLE["min_thickness_px"], 
+                            int(VECTOR_STYLE["thickness"] * 1.5))  # Slightly thicker than shaft
+        self.vector = None  # Underlying vector instance
+
+    def draw(self, canvas):
+        """
+        Draw the arrowhead on the canvas.
+        
+        If filled=True, draws a polygon (if supported) or a series of lines to approximate
+        a filled triangle. If filled=False, draws just the outline.
+        """
+        # If the canvas supports drawing filled polygons, use that
+        if hasattr(canvas, 'draw_filled_polygon'):
+            if self.filled:
+                # Draw as a filled polygon
+                canvas.draw_filled_polygon(
+                    [(self.tip_x, self.tip_y), 
+                     (self.corner1_x, self.corner1_y),
+                     (self.corner2_x, self.corner2_y)],
+                    color=self.color
+                )
+            else:
+                # Draw just the outline
+                canvas.draw_line(self.tip_x, self.tip_y, self.corner1_x, self.corner1_y,
+                              thickness=self.thickness, color=self.color)
+                canvas.draw_line(self.tip_x, self.tip_y, self.corner2_x, self.corner2_y,
+                              thickness=self.thickness, color=self.color)
+                canvas.draw_line(self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y,
+                              thickness=self.thickness, color=self.color)
+        else:
+            # If no polygon support, draw as three lines
+            canvas.draw_line(self.tip_x, self.tip_y, self.corner1_x, self.corner1_y,
+                         thickness=self.thickness, color=self.color)
+            canvas.draw_line(self.tip_x, self.tip_y, self.corner2_x, self.corner2_y,
+                         thickness=self.thickness, color=self.color)
+            
+            if self.filled:
+                # For filled mode, connect the base corners
+                canvas.draw_line(self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y,
+                             thickness=self.thickness, color=self.color)
+        
+        # Draw highlight if selected
+        if self.selected:
+            highlight_thickness = self.thickness + HIGHLIGHT["thickness_delta"]
+            canvas.draw_line(self.tip_x, self.tip_y, self.corner1_x, self.corner1_y,
+                         thickness=highlight_thickness, color=HIGHLIGHT["color"])
+            canvas.draw_line(self.tip_x, self.tip_y, self.corner2_x, self.corner2_y,
+                         thickness=highlight_thickness, color=HIGHLIGHT["color"])
+            if self.filled:
+                canvas.draw_line(self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y,
+                             thickness=highlight_thickness, color=HIGHLIGHT["color"])
+
+    def contains(self, x, y, tolerance=3):
+        """
+        Determine whether the point (x, y) is inside the arrowhead triangle.
+        
+        This uses a barycentric coordinate calculation to check if the point
+        is inside the triangle. A tolerance value is added to make selection easier.
+        
+        Parameters:
+            x, y: The point to test
+            tolerance: Additional radius for hit detection
+            
+        Returns:
+            bool: True if point is within the triangle (plus tolerance)
+        """
+        # First check if the point is near any of the three edges
+        edges = [
+            (self.tip_x, self.tip_y, self.corner1_x, self.corner1_y),
+            (self.tip_x, self.tip_y, self.corner2_x, self.corner2_y),
+            (self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y)
+        ]
+        
+        for x1, y1, x2, y2 in edges:
+            dx = x2 - x1
+            dy = y2 - y1
+            if dx == 0 and dy == 0:
+                continue
+                
+            # Project onto the line
+            t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)
+            t = max(0, min(1, t))
+            
+            # Calculate closest point on the line
+            cx = x1 + t * dx
+            cy = y1 + t * dy
+            
+            # Check distance
+            dist_sq = (x - cx)**2 + (y - cy)**2
+            if dist_sq <= tolerance**2:
+                return True
+        
+        # If not near any edge, check if inside the triangle using barycentric coordinates
+        # Area of the triangle
+        area_full = 0.5 * abs(
+            (self.corner1_x - self.tip_x) * (self.corner2_y - self.tip_y) -
+            (self.corner2_x - self.tip_x) * (self.corner1_y - self.tip_y)
+        )
+        
+        if area_full < 1e-6:  # Degenerate triangle
+            return False
+            
+        # Barycentric coordinates
+        alpha = 0.5 * abs(
+            (self.corner1_x - x) * (self.corner2_y - y) -
+            (self.corner2_x - x) * (self.corner1_y - y)
+        ) / area_full
+        
+        beta = 0.5 * abs(
+            (self.tip_x - x) * (self.corner2_y - y) -
+            (self.corner2_x - x) * (self.tip_y - y)
+        ) / area_full
+        
+        gamma = 1 - alpha - beta
+        
+        # If all barycentric coordinates are between 0 and 1, the point is inside
+        return 0 <= alpha <= 1 and 0 <= beta <= 1 and 0 <= gamma <= 1

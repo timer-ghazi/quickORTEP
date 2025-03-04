@@ -94,6 +94,7 @@ class _EventHandler:
             # Display options
             'd': self._toggle_hydrogens,
             'g': self._toggle_grid,
+            'a': self._toggle_axes,  # Add axes toggle command
             
             # Bond operations
             'p': self._toggle_graph_mode,
@@ -114,6 +115,15 @@ class _EventHandler:
             'f': self._fit_molecule_to_window,
             'r': self._reset_view,
         }
+        
+        # Override with configurable keys if present
+        axes_toggle_key = VIEWER_INTERACTION.get("axes_toggle_key", "a")
+        if axes_toggle_key != "a":
+            # Remove the default 'a' mapping
+            if 'a' in self.key_commands:
+                del self.key_commands['a']
+            # Add the configured key for toggling axes
+            self.key_commands[axes_toggle_key] = self._toggle_axes
 
     def handle_key(self, evt):
         """
@@ -261,6 +271,9 @@ class _EventHandler:
                             self._handle_atom_selection(clicked_obj.atom, shift_pressed)
                         elif hasattr(clicked_obj, 'bond') and clicked_obj.bond is not None:
                             self._handle_bond_selection(clicked_obj.bond, shift_pressed)
+                        elif hasattr(clicked_obj, 'vector') and clicked_obj.vector is not None:
+                            # Add vector selection handling
+                            self._handle_vector_selection(clicked_obj.vector, shift_pressed)
                         else:
                             # Clear selection if no valid object was clicked
                             self._clear_all_selections()
@@ -342,6 +355,10 @@ class _EventHandler:
     def _toggle_grid(self):
         """Toggle the visibility of the grid."""
         self.viewer.toggle_grid()
+    
+    def _toggle_axes(self):
+        """Toggle the visibility of the coordinate axes."""
+        self.viewer.toggle_axes()
     
     def _toggle_graph_mode(self):
         """Toggle the graph mode between energy and bond length."""
@@ -607,6 +624,38 @@ class _EventHandler:
                     "Press 'p' to show bond length plot"
                 )
     
+    def _handle_vector_selection(self, vector, shift_pressed):
+        """
+        Handle vector selection and deselection.
+        
+        Parameters:
+            vector: The vector to select/deselect.
+            shift_pressed: Whether Shift key is pressed (for multi-selection).
+        """
+        # Clear other selections when a vector is clicked
+        self._clear_atom_selections()
+        self._clear_bond_selections()
+        
+        # Toggle vector selection state
+        vector.selected = not vector.selected
+        
+        # Inform the user
+        status = "Selected" if vector.selected else "Deselected"
+        # If it's an axis vector, use a more descriptive message
+        if hasattr(vector, '_is_axis_vector'):
+            axis_names = ["X", "Y", "Z"]
+            # Find which axis this is
+            for i, axis_vector in enumerate(self.viewer.ortep_mol.axis_system.get_vectors()):
+                if vector is axis_vector and i < len(axis_names):
+                    self.viewer.message_service.log_info(
+                        f"{status} {axis_names[i]} axis"
+                    )
+                    break
+            else:
+                self.viewer.message_service.log_info(f"{status} axis vector")
+        else:
+            self.viewer.message_service.log_info(f"{status} vector")
+    
     def _clear_atom_selections(self):
         """Clear all atom selections."""
         for atom in self.viewer.selected_atoms:
@@ -625,3 +674,7 @@ class _EventHandler:
         """Clear all selections (atoms and bonds)."""
         self._clear_atom_selections()
         self._clear_bond_selections()
+        
+        # Clear vector selections (if any)
+        for vector in self.viewer.ortep_mol.vectors:
+            vector.selected = False

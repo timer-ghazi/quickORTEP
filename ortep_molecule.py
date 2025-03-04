@@ -1,5 +1,8 @@
 # ortep_molecule.py
 
+from vectors import Vector, AxisSystem
+from config import AXES_STYLE
+
 class ORTEP_Atom:
     """
     Represents a single atom in 3D space.
@@ -17,12 +20,14 @@ class ORTEP_Molecule:
     """
     A container for atoms and bonds in the ORTEP style.
     
-    Note: The old ORTEP_Bond class is deprecated.
-    Bonds should now be instances of classes from bonds.py.
+    Also stores vectors for visualization of coordinate axes, normal modes,
+    or other vector quantities.
     """
     def __init__(self):
         self.atoms = []
         self.bonds = []
+        self.vectors = []
+        self.axis_system = None  # Will hold coordinate axes if enabled
 
     def add_atom(self, atom):
         # Assign a sequential index (starting from 1)
@@ -102,3 +107,90 @@ class ORTEP_Molecule:
 
         self.add_bond(new_bond)
         return new_bond
+    
+    def add_vector(self, vector):
+        """
+        Add a vector to the molecule.
+        
+        Parameters:
+            vector: A Vector instance
+        """
+        self.vectors.append(vector)
+        return vector
+    
+    def remove_vector(self, vector):
+        """
+        Remove a vector from the molecule.
+        
+        Parameters:
+            vector: The Vector instance to remove
+        """
+        if vector in self.vectors:
+            self.vectors.remove(vector)
+        else:
+            print("Vector not found in the molecule.")
+    
+    def clear_vectors(self):
+        """
+        Remove all vectors from the molecule.
+        """
+        self.vectors.clear()
+    
+    def create_coordinate_axes(self, origin=None):
+        """
+        Create or update a coordinate axis system at the specified origin.
+        If origin is None, use the geometric center of the molecule.
+        
+        Parameters:
+            origin: (x, y, z) coordinates for the axes origin, or None for molecule center
+            
+        Returns:
+            The created AxisSystem instance
+        """
+        # If no origin specified, use geometric center of the molecule
+        if origin is None:
+            if not self.atoms:
+                # No atoms, use (0,0,0)
+                origin = (0.0, 0.0, 0.0)
+            else:
+                # Calculate geometric center
+                x_sum = sum(atom.x for atom in self.atoms)
+                y_sum = sum(atom.y for atom in self.atoms)
+                z_sum = sum(atom.z for atom in self.atoms)
+                n_atoms = len(self.atoms)
+                origin = (x_sum / n_atoms, y_sum / n_atoms, z_sum / n_atoms)
+        
+        # Create the axis system
+        self.axis_system = AxisSystem(origin=origin)
+        
+        # Clear any existing axis vectors and add the new ones
+        self.vectors = [v for v in self.vectors if not hasattr(v, '_is_axis_vector')]
+        for vector in self.axis_system.get_vectors():
+            vector._is_axis_vector = True  # Mark as an axis vector
+            self.add_vector(vector)
+        
+        return self.axis_system
+    
+    def toggle_coordinate_axes(self, show):
+        """
+        Show or hide the coordinate axes.
+        
+        Parameters:
+            show: Boolean, whether to show (True) or hide (False) the axes
+        """
+        # Remove existing axes if present
+        self.vectors = [v for v in self.vectors if not hasattr(v, '_is_axis_vector')]
+        
+        # Create new axes if showing
+        if show:
+            if self.axis_system:
+                # Reuse existing axis system
+                for vector in self.axis_system.get_vectors():
+                    vector._is_axis_vector = True
+                    self.add_vector(vector)
+            else:
+                # Create new axis system
+                self.create_coordinate_axes()
+        else:
+            # Just clear the reference if hiding
+            self.axis_system = None

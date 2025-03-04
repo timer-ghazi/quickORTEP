@@ -3,8 +3,8 @@
 import numpy as np
 from geometry_utils import rotate_points, project_points
 from elements_table import Elements
-from zobjects import ZAtom, ZSegment
-from config import ATOM_STYLE, ARC_STYLE
+from zobjects import ZAtom, ZSegment, ZArrowHead
+from config import ATOM_STYLE, ARC_STYLE, AXES_STYLE
 
 def hex_to_rgb(hex_color):
     """
@@ -21,6 +21,7 @@ class ORTEP_MoleculeRenderer:
     """
     Responsible for drawing atoms and bonds of an ORTEP_Molecule using
     a painter's algorithm (z-sorting). Bond segmentation is delegated to the bond objects.
+    Also handles rendering of vectors and coordinate axes.
     """
     def build_render_list(self, ortep_molecule, vp):
         render_list = []
@@ -28,6 +29,9 @@ class ORTEP_MoleculeRenderer:
         n_atoms = len(ortep_molecule.atoms)
         
         if n_atoms == 0:
+            # If no atoms, we may still have vectors (like coordinate axes)
+            if ortep_molecule.vectors:
+                render_list.extend(self._build_vector_render_list(ortep_molecule, vp))
             return render_list
 
         # --- Vectorized processing of atom positions ---
@@ -86,6 +90,91 @@ class ORTEP_MoleculeRenderer:
                 # Propagate persistent selection state from the underlying bond.
                 seg.selected = getattr(bond, 'selected', False)
                 render_list.append(seg)
+        
+        # --- Process vectors ---
+        vector_objects = self._build_vector_render_list(ortep_molecule, vp)
+        render_list.extend(vector_objects)
+        
+        return render_list
+
+    def _build_vector_render_list(self, ortep_molecule, vp):
+        """
+        Build the render list for vectors (including coordinate axes).
+        
+        Parameters:
+            ortep_molecule: The ORTEP_Molecule instance containing vectors
+            vp: The view parameters
+            
+        Returns:
+            list: A list of ZObject instances for the vectors
+        """
+        render_list = []
+        
+        for vector in ortep_molecule.vectors:
+            # Get start and end points
+            start_point = vector.start_point
+            end_point = vector.get_end_point()
+            
+            # Rotate start and end points
+            rotated_points = rotate_points(
+                np.array([start_point, end_point]), 
+                vp.rx, vp.ry, vp.rz
+            )
+            
+            # Get rotated coordinates
+            start_rot = rotated_points[0]
+            end_rot = rotated_points[1]
+            
+            # Radius is 0 for vectors (no clipping)
+            rotated_coords = (
+                (start_rot[0], start_rot[1], start_rot[2], 0.0),
+                (end_rot[0], end_rot[1], end_rot[2], 0.0)
+            )
+            
+            # Get segments for the vector shaft and arrowhead
+            segments = vector.get_segments(rotated_coords, vp)
+            
+            # Add segments to render list
+            for seg in segments:
+                seg.vector = vector  # Link back to source vector
+                seg.selected = getattr(vector, 'selected', False)
+                render_list.append(seg)
+            
+        # If axis system exists and has labels, render them
+        if ortep_molecule.axis_system and AXES_STYLE["show_labels"]:
+            labels = ortep_molecule.axis_system.get_labels()
+            for position, text, color in labels:
+                # Rotate the label position
+                rotated_pos = rotate_points(np.array([position]), vp.rx, vp.ry, vp.rz)[0]
+                
+                # Project to screen coordinates
+                screen_pos = project_points(np.array([rotated_pos]), vp)[0]
+                
+                # Create a render object for the label
+                # Since we don't have a ZText object, we'll create a custom object
+                # that draws text at the specified position
+                class ZLabel(ZSegment):
+                    def __init__(self, x, y, z, text, color):
+                        super().__init__(x, y, x, y, z, 1, color)  # Zero-length segment
+                        self.text = text
+                    
+                    def draw(self, canvas):
+                        # Draw text at position
+                        canvas.draw_text(
+                            self.x1, self.y1, 
+                            self.text, 
+                            color=self.color, 
+                            font_size=AXES_STYLE["label_font_size"]
+                        )
+                
+                # Create and add the label
+                z_label = ZLabel(
+                    int(screen_pos[0]), int(screen_pos[1]), 
+                    rotated_pos[2], 
+                    text, color
+                )
+                render_list.append(z_label)
+        
         return render_list
 
     def _get_atom_color(self, atom):
