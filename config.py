@@ -290,7 +290,8 @@ ATOM_STYLE = {
     "min_radius": 2,
     
     # Color palette for atoms
-    "color_palette": "GreenRasmol",
+    "color_palette": "Rasmol",
+    # "color_palette": "GreenRasmol",
     
     # Fallback color for unknown atoms
     "fallback_color": (200, 200, 200),

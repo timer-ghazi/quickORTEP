@@ -6,6 +6,9 @@ The MoleculeViewer class manages an ORTEP_Molecule, its rendering,
 and handles user events. It now delegates trajectory conversion,
 selection, event handling, and export functionality to helper modules.
 It also supports bond propagation across trajectory frames.
+
+Normal mode visualization is supported through vectors representing
+vibrational displacements.
 """
 
 import sys
@@ -24,6 +27,7 @@ from message_service import MessageService
 from message_panel import MessagePanel
 from graph_viewer import GraphViewer
 from bond_edit_tracker import BondEditTracker
+from vectors import Vector
 
 # Import our helper modules.
 from selection_manager import _SelectionManager
@@ -129,6 +133,14 @@ class MoleculeViewer(X11Window):
         self.show_hydrogens = True
         self.show_axes = CURRENT_THEME.get("show_axes", False)  # Initialize from theme
 
+        # Normal mode visualization
+        self.show_normal_modes = False
+        self.current_normal_mode_index = 0
+        self.normal_mode_scale_factor = 1.0
+        self.has_normal_modes = False
+        self.normal_mode_data = None  # Will hold the FrequencyData object
+        self.normal_mode_frame_index = None  # Frame index for which normal modes are available
+
         # Initialize helper modules.
         self._selection_manager = _SelectionManager()
         self._event_handler = _EventHandler(self)
@@ -227,6 +239,18 @@ class MoleculeViewer(X11Window):
         
         # Reset the energy graph so it will be recreated with the new trajectory data
         self.energy_graph = None
+        
+        # Check for normal mode data in the trajectory metadata
+        self.has_normal_modes = False
+        self.normal_mode_data = None
+        self.normal_mode_frame_index = None
+        
+        if 'frequency_data' in trajectory.metadata:
+            self.normal_mode_data = trajectory.metadata['frequency_data']
+            self.normal_mode_frame_index = trajectory.metadata.get('freq_data_frame_index', None)
+            if self.normal_mode_data and self.normal_mode_frame_index is not None:
+                self.has_normal_modes = True
+                self.message_service.log_info(f"Normal mode data available for frame {self.normal_mode_frame_index}")
         
         # Log energy unit information
         energies, energy_info = trajectory.energy_trajectory(
@@ -381,6 +405,164 @@ class MoleculeViewer(X11Window):
                     y_axis_title=y_axis_title
                 )
 
+    def toggle_normal_modes(self):
+        """
+        Toggle display of normal mode vectors.
+        """
+        if not self.has_normal_modes:
+            self.message_service.log_info("No normal modes available")
+            return
+
+        # Only allow showing normal modes on the frame that has the data
+        if self.current_frame != self.normal_mode_frame_index:
+            self.message_service.log_info(f"Normal modes only available for frame {self.normal_mode_frame_index}")
+            return
+        
+        # Toggle display state
+        self.show_normal_modes = not self.show_normal_modes
+        
+        if self.show_normal_modes:
+            # Create vectors for the current normal mode
+            self.create_normal_mode_vectors()
+            mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+            freq_text = f"{abs(mode.frequency):.1f} cm⁻¹"
+            if mode.frequency < 0:
+                freq_text = f"{freq_text} (imaginary)"
+            self.message_service.log_info(f"Showing normal mode {self.current_normal_mode_index + 1}/{len(self.normal_mode_data.modes)}: {freq_text}")
+        else:
+            # Clear normal mode vectors
+            self.clear_normal_mode_vectors()
+            self.message_service.log_info("Normal mode vectors hidden")
+        
+        self.redraw()
+
+    def cycle_normal_mode(self, direction):
+        """
+        Cycle to the next or previous normal mode.
+        
+        Parameters:
+            direction (int): 1 for next, -1 for previous
+        """
+        if not self.has_normal_modes or not self.show_normal_modes:
+            return
+            
+        # Update the current normal mode index
+        num_modes = len(self.normal_mode_data.modes)
+        self.current_normal_mode_index = (self.current_normal_mode_index + direction) % num_modes
+        
+        # Create vectors for the new current mode
+        self.create_normal_mode_vectors()
+        
+        # Log information about the current mode
+        mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+        freq_text = f"{abs(mode.frequency):.1f} cm⁻¹"
+        if mode.frequency < 0:
+            freq_text = f"{freq_text} (imaginary)"
+        self.message_service.log_info(f"Normal mode {self.current_normal_mode_index + 1}/{num_modes}: {freq_text}")
+        
+        self.redraw()
+
+    def adjust_normal_mode_scale(self, factor):
+        """
+        Adjust the scale factor for normal mode vectors.
+        
+        Parameters:
+            factor (float): Multiplier to adjust the scale
+        """
+        if not self.has_normal_modes or not self.show_normal_modes:
+            return
+            
+        # Update the scale factor
+        old_scale = self.normal_mode_scale_factor
+        self.normal_mode_scale_factor *= factor
+        
+        # Clamp to reasonable values
+        min_scale = 0.1
+        max_scale = 50.0
+        self.normal_mode_scale_factor = max(min_scale, min(max_scale, self.normal_mode_scale_factor))
+        
+        # Recreate vectors with the new scale
+        if old_scale != self.normal_mode_scale_factor:
+            self.create_normal_mode_vectors()
+            self.message_service.log_info(f"Normal mode scale: {self.normal_mode_scale_factor:.1f}")
+            self.redraw()
+
+    def create_normal_mode_vectors(self):
+        """
+        Create vectors representing the current normal mode.
+        """
+        # Clear any existing normal mode vectors
+        self.clear_normal_mode_vectors()
+        
+        if not self.has_normal_modes or not self.show_normal_modes:
+            return
+            
+        # Get the current normal mode
+        mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+        
+        # Set colors based on whether the mode is imaginary
+        if mode.frequency < 0:
+            # Imaginary frequency - use red
+            vector_color = (255, 0, 0)
+        else:
+            # Real frequency - use blue to green gradient based on displacement magnitude
+            vector_color = (0, 128, 255)  # Default blue
+        
+        # Create vectors for each atom's displacement
+        displacements = mode.displacements
+        
+        # Find maximum displacement for scaling
+        max_displacement = 0.0
+        for dx, dy, dz in displacements:
+            magnitude = np.sqrt(dx*dx + dy*dy + dz*dz)
+            max_displacement = max(max_displacement, magnitude)
+        
+        # Base scale - adjusted empirically
+        scale_base = 3.0 / max_displacement if max_displacement > 0 else 1.0
+        scale = scale_base * self.normal_mode_scale_factor
+        
+        # Create vectors for each atom
+        for i, atom in enumerate(self.ortep_mol.atoms):
+            if i < len(displacements):
+                dx, dy, dz = displacements[i]
+                
+                # Skip negligible displacements
+                magnitude = np.sqrt(dx*dx + dy*dy + dz*dz)
+                if magnitude < 1e-6:
+                    continue
+                
+                # Create the vector
+                start_point = (atom.x, atom.y, atom.z)
+                end_point = (
+                    atom.x + dx * scale,
+                    atom.y + dy * scale,
+                    atom.z + dz * scale
+                )
+                
+                # For non-imaginary modes, color by displacement magnitude relative to max
+                if mode.frequency >= 0:
+                    # Scale from blue to green based on magnitude
+                    intensity = min(1.0, magnitude / max_displacement)
+                    r = 0
+                    g = int(128 + 127 * intensity)
+                    b = int(255 - 127 * intensity)
+                    vector_color = (r, g, b)
+                
+                # Create and add the vector
+                vector = Vector(start_point=start_point, end_point=end_point, color=vector_color)
+                self.ortep_mol.add_vector(vector)
+
+    def clear_normal_mode_vectors(self):
+        """
+        Clear all normal mode vectors.
+        """
+        # Remove all vectors that are not coordinate axes
+        self.ortep_mol.vectors = [v for v in self.ortep_mol.vectors if hasattr(v, '_is_axis_vector')]
+        
+        # Recreate coordinate axes if they should be shown
+        if self.show_axes and not self.ortep_mol.axis_system:
+            self.ortep_mol.create_coordinate_axes()
+
     def set_frame(self, frame_index):
         """
         Set the current frame and apply bond edits if bond propagation is enabled.
@@ -388,6 +570,11 @@ class MoleculeViewer(X11Window):
         if self.trajectory is None:
             return
             
+        # Clear normal mode vectors when changing frames
+        if self.show_normal_modes:
+            self.show_normal_modes = False
+            self.clear_normal_mode_vectors()
+        
         # Delegate frame conversion to the trajectory manager with bond edits
         self.current_frame = frame_index
         self.ortep_mol = self._traj_manager.convert_frame(
@@ -437,6 +624,10 @@ class MoleculeViewer(X11Window):
         # Recreate coordinate axes if they should be shown
         if self.show_axes:
             self.ortep_mol.create_coordinate_axes()
+            
+        # Show normal mode prompt if available for this frame
+        if self.has_normal_modes and frame_index == self.normal_mode_frame_index:
+            self.message_service.log_info(f"Normal modes available for this frame. Press 'v' to view.")
 
         self.redraw()
 
@@ -494,20 +685,28 @@ class MoleculeViewer(X11Window):
                 else:
                     lines.append(f"Energy: {energy:.2f} {unit_symbol}{energy_method}")
         
+        # Add normal mode information if available and visible
+        if self.has_normal_modes:
+            if self.current_frame == self.normal_mode_frame_index:
+                if self.show_normal_modes:
+                    mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+                    freq_text = f"{abs(mode.frequency):.1f} cm⁻¹"
+                    if mode.frequency < 0:
+                        freq_text = f"{freq_text} (imaginary)"
+                    lines.append(f"Normal mode {self.current_normal_mode_index + 1}/{len(self.normal_mode_data.modes)}: {freq_text}")
+                    lines.append(f"IR intensity: {mode.ir_intensity:.1f} KM/mol | Scale: {self.normal_mode_scale_factor:.1f}")
+                    lines.append("Press ',' / '.' to cycle modes, '<' / '>' to adjust scale")
+                else:
+                    lines.append("Normal modes available. Press 'v' to view.")
+            elif self.normal_mode_frame_index is not None:
+                lines.append(f"Normal modes available on frame {self.normal_mode_frame_index}")
+        
         # Add display options status
         display_options = []
         display_options.append("H" if self.show_hydrogens else "no H")
         display_options.append("axes" if self.show_axes else "no axes")
         lines.append(f"Display: {', '.join(display_options)}")
         
-        #---- # Add bond propagation status
-        #---- prop_status = "enabled" if self.bond_edit_tracker.enabled else "disabled"
-        #---- edit_count = self.bond_edit_tracker.get_edit_count()
-        #---- if edit_count > 0:
-        #----     lines.append(f"Bond propagation: {prop_status} ({edit_count} edits)")
-        #---- else:
-        #----     lines.append(f"Bond propagation: {prop_status}")
-            
         # Add graph mode info
         if self.graph_mode == "bond_length" and self.selected_bond_for_graph:
             atom1_idx, atom2_idx = self.selected_bond_for_graph

@@ -111,6 +111,13 @@ class _EventHandler:
             '=': self._goto_highest_energy_frame,
             '-': self._goto_lowest_energy_frame,
             
+            # Normal mode visualization
+            'v': self._toggle_normal_modes,
+            ',': lambda: self._cycle_normal_mode(-1),  # Previous mode
+            '.': lambda: self._cycle_normal_mode(1),   # Next mode
+            '<': self._decrease_normal_mode_scale,     # Decrease scale
+            '>': self._increase_normal_mode_scale,     # Increase scale
+            
             # Reset/fit operations
             'f': self._fit_molecule_to_window,
             'r': self._reset_view,
@@ -359,6 +366,27 @@ class _EventHandler:
     def _toggle_axes(self):
         """Toggle the visibility of the coordinate axes."""
         self.viewer.toggle_axes()
+    
+    def _toggle_normal_modes(self):
+        """Toggle the display of normal mode vectors."""
+        self.viewer.toggle_normal_modes()
+    
+    def _cycle_normal_mode(self, direction):
+        """
+        Cycle to the next or previous normal mode.
+        
+        Parameters:
+            direction: 1 for next, -1 for previous
+        """
+        self.viewer.cycle_normal_mode(direction)
+    
+    def _increase_normal_mode_scale(self):
+        """Increase the scale factor for normal mode vectors."""
+        self.viewer.adjust_normal_mode_scale(1.25)  # Increase by 25%
+    
+    def _decrease_normal_mode_scale(self):
+        """Decrease the scale factor for normal mode vectors."""
+        self.viewer.adjust_normal_mode_scale(0.8)  # Decrease by 20%
     
     def _toggle_graph_mode(self):
         """Toggle the graph mode between energy and bond length."""
