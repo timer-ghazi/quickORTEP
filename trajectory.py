@@ -16,6 +16,10 @@ from abc import ABC, abstractmethod
 from molecule_nci import MoleculeWithNCIs  # Assumes molecule_nci.py (and molecule.py) are in the path
 from config import ENERGY_UNITS, DEFAULT_ENERGY_UNIT
 
+# ADDED FOR FREQ DATA
+# We'll import parse_gaussian_frequencies so we can attach freq data to metadata:
+from normal_modes import parse_gaussian_frequencies
+
 
 class TrajectoryParser(ABC):
     """
@@ -80,7 +84,7 @@ class XYZTrajectoryParser(TrajectoryParser):
                 first_line = next(f, '').strip()
                 # Check if first line is a number (atom count)
                 try:
-                    num_atoms = int(first_line)
+                    _ = int(first_line)
                     return True
                 except ValueError:
                     return False
@@ -228,8 +232,18 @@ class GaussianTrajectoryParser(TrajectoryParser):
                     'step': step
                 }
         
+        # ADDED FOR FREQ DATA:
+        # Attempt to parse vibrational frequencies (if present).
+        freq_data = parse_gaussian_frequencies(file_path)
+        if freq_data is not None:
+            # Attach the entire FrequencyData object to metadata
+            metadata["frequency_data"] = freq_data
+            # We assume freq data belongs to the final geometry frame (last in raw_frames)
+            if raw_frames:
+                metadata["freq_data_frame_index"] = len(raw_frames) - 1
+        
         return raw_frames, metadata
-    
+
     @staticmethod
     def _parse_opt_energies(logfile_path):
         """
@@ -240,28 +254,15 @@ class GaussianTrajectoryParser(TrajectoryParser):
         Overwrites SCF energies with correlated or external energies
         for the same step if present.
         """
-        # This is directly copied from parse-gaussian.py to preserve the exact logic
         final_energies = {}    # step_number -> (energy_value, label)
 
-        # Regex patterns:
-        # 1) SCF/hybrid/double-hybrid preliminary line
         scf_done_pat = re.compile(
             r'^ *SCF Done:\s+E\(\w+\)\s*=\s*([-\d.]+(?:[DEe][+\-]?\d+)?)'
         )
-
-        # 3) MP2 final lines:
-        #    Example: " E2 = -0.72D+00 EUMP2 = -0.2443116D+03"
-        #    We do *not* use '^', so it can appear anywhere in the line.
-        #    We'll just look for the substring "EUMP2 =" or "E(MP2)=" plus the energy.
         mp2_pat = re.compile(
             r'(?:EUMP2\s*=\s*|E\(MP2\)\s*=\s*)([-\d.]+(?:[DEe][+\-]?\d+)?)'
         )
-
-        # 4) Double-hybrid final correlation lines "E(...)= ...".
-        #    We'll pick the last one if line has multiple E(...)= ...
         dh_correlation_pat = re.compile(r'\bE\([\w\d]+\)\s*=\s*([-\d.]+(?:[DEe][+\-]?\d+)?)')
-
-        # 5) External code lines
         ext_pat = re.compile(r'^(?:Energy=|Recovered energy=)\s*([-\d.]+(?:[DEe][+\-]?\d+)?)')
 
         current_step = 0
@@ -278,7 +279,6 @@ class GaussianTrajectoryParser(TrajectoryParser):
                     continue
 
                 # MP2 line => override if found
-                # Here we do a .search(...) so it can match anywhere in the line
                 mp2_match = mp2_pat.search(line)
                 if mp2_match and current_step > 0:
                     val = float(mp2_match.group(1).replace('D','E'))
@@ -289,7 +289,6 @@ class GaussianTrajectoryParser(TrajectoryParser):
                 if 'E2(' in line and current_step > 0:
                     matches = dh_correlation_pat.findall(line)
                     if matches:
-                        # The last match is presumably the final total
                         val_str = matches[-1]
                         val = float(val_str.replace('D','E'))
                         final_energies[current_step] = (val, 'Double-Hybrid')
@@ -311,7 +310,6 @@ class GaussianTrajectoryParser(TrajectoryParser):
         Parse geometries from a Gaussian log file.
         Returns a dictionary: orientation_type -> list of geometry blocks
         """
-        # Initialize data buckets for orientations
         data = {key: [] for key in cls.ORIENTATIONS}
         
         with open(logfile_path, 'r') as file:
@@ -334,7 +332,6 @@ class GaussianTrajectoryParser(TrajectoryParser):
                             atom_num, x, y, z = entries[1], entries[3], entries[4], entries[5]
                             collected_lines.append((int(atom_num), float(x), float(y), float(z)))
 
-                    # Store this geometry block
                     data[orientation_type].append(collected_lines)
 
         return data
@@ -367,16 +364,13 @@ class GaussianTrajectoryParser(TrajectoryParser):
         """
         from elements_table import Elements  # Import here to avoid circular imports
         
-        # Count atoms
         num_atoms = len(geometry)
         
-        # Create header lines with energy in a format that _parse_energy() will recognize
         xyz_frame = [
             str(num_atoms),
             f"Step {step} | {orientation} orientation | Energy= {energy_value} | Type: {energy_type}"
         ]
         
-        # Add atom lines
         for atom_data in geometry:
             atomic_num, x, y, z = atom_data
             symbol = Elements.symbol(atomic_num)
@@ -552,7 +546,6 @@ class Trajectory:
         if len(energies) == 0 or np.isnan(energies).all():
             return energies, {'original_unit': 'unknown', 'converted_unit': 'unknown', 'normalized': False}
         
-        # Initialize conversion metadata
         conversion_info = {
             'original_unit': 'unknown',
             'converted_unit': 'unknown',
@@ -561,7 +554,6 @@ class Trajectory:
             'conversion_factor': 1.0
         }
         
-        # Detect if energies are in Hartrees
         is_hartrees = self._detect_hartree_units()
         
         if is_hartrees:
@@ -569,41 +561,27 @@ class Trajectory:
         elif 'energy_unit' in self.metadata:
             conversion_info['original_unit'] = self.metadata['energy_unit']
         
-        # Store minimum energy before any conversions
         valid_energies = energies[~np.isnan(energies)]
         min_energy = np.min(valid_energies)
         conversion_info['min_energy'] = min_energy
         
-        # Apply normalization and conversion if requested
         if convert_if_hartrees and is_hartrees:
-            # Determine target unit
             target_unit = convert_to_unit if convert_to_unit else DEFAULT_ENERGY_UNIT
-            
             if target_unit in ENERGY_UNITS:
-                # Get conversion factor
                 conversion_factor = ENERGY_UNITS['hartree'][f'to_{target_unit}']
-                
-                # Apply conversion to valid values
                 mask = ~np.isnan(energies)
-                
-                # First convert to target unit
                 energies_converted = energies.copy()
                 energies_converted[mask] = energies[mask] * conversion_factor
-                
-                # Then normalize by subtracting the minimum (in the new unit)
                 min_energy_converted = min_energy * conversion_factor
                 energies_normalized = energies_converted.copy()
                 energies_normalized[mask] = energies_converted[mask] - min_energy_converted
                 
-                # Update metadata
                 conversion_info['converted_unit'] = target_unit
                 conversion_info['conversion_factor'] = conversion_factor
                 conversion_info['normalized'] = True
                 
-                # Return normalized energies
                 return energies_normalized, conversion_info
         
-        # If we get here, just return the original energies
         conversion_info['converted_unit'] = conversion_info['original_unit']
         return energies, conversion_info
 
@@ -613,13 +591,11 @@ class Trajectory:
         For each frame, the molecule is fully processed (if not already) so that
         its Energy attribute is available.
         """
-        # Get energies with conversion
         energies, energy_info = self.energy_trajectory(
             convert_if_hartrees=convert_if_hartrees,
             convert_to_unit=convert_to_unit
         )
         
-        # Prepare header with units
         unit_display = ENERGY_UNITS.get(
             energy_info['converted_unit'], 
             {'symbol': energy_info['converted_unit']}
@@ -634,7 +610,6 @@ class Trajectory:
             energy_val = energies[i]
             energy_str = f"{energy_val:.6f}" if not np.isnan(energy_val) else "N/A"
             
-            # Add energy type and orientation if available in metadata
             energy_type = "N/A"
             orientation = "N/A"
             if self.metadata and 'energy_data' in self.metadata and i in self.metadata['energy_data']:
@@ -646,10 +621,6 @@ class Trajectory:
     def print_distance_table(self, atom1, atom2):
         """
         Print a table of the distance between two specified atoms for each frame.
-
-        Parameters:
-            atom1 (int): Index of the first atom.
-            atom2 (int): Index of the second atom.
         """
         print(f"Frame\tDistance (Atom {atom1} - Atom {atom2})")
         print("-----------------------------------------")
@@ -788,7 +759,6 @@ class Trajectory:
         
         valid_energies = energies[~np.isnan(energies)]
         if len(valid_energies) > 0:
-            # Get unit information
             unit_display = ENERGY_UNITS.get(
                 energy_info['converted_unit'], 
                 {'symbol': energy_info['converted_unit']}
@@ -811,7 +781,6 @@ class Trajectory:
                 
                 print(f"Energy conversion: {original_unit} → {converted_unit}")
             
-            # Add energy type info if available
             if 'format' in self.metadata and self.metadata['format'] == 'gaussian':
                 energy_types = set()
                 if 'energy_data' in self.metadata:
@@ -885,7 +854,6 @@ def main():
     # Filter demonstration (only show if multiple frames are present)
     if not traj.is_single_structure():
         print("\n--- Filter Demonstration ---")
-        # Filter to frames with energy below the median (if energies are available)
         energies, _ = traj.energy_trajectory()
         valid_energies = energies[~np.isnan(energies)]
         if len(valid_energies) > 0:
