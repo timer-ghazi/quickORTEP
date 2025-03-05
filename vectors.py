@@ -4,7 +4,7 @@ import math
 import numpy as np
 from config import VECTOR_STYLE, AXES_STYLE
 from geometry_utils import project_point, project_points
-from zobjects import ZSegment
+from zobjects import ZSegment, ZArrowHead
 
 class Vector:
     """
@@ -187,7 +187,7 @@ class Vector:
     
     def _get_arrowhead_segments(self, p1, p2, shaft_end_factor, view_params):
         """
-        Generate segments for the vector's arrowhead using existing ZSegment objects.
+        Generate the arrowhead for the vector.
         
         Parameters:
             p1: np.array with (x, y, z) of start point in rotated space
@@ -196,7 +196,7 @@ class Vector:
             view_params: view parameters for projection
             
         Returns:
-            list: ZSegment objects for the arrowhead
+            list: Objects for the arrowhead (ZArrowHead or ZSegment)
         """
         # Calculate arrow properties
         arrowhead_length = VECTOR_STYLE["arrowhead"]["length"]
@@ -238,33 +238,49 @@ class Vector:
         # Get arrowhead color (use the same color as shaft if not specified)
         arrowhead_color = VECTOR_STYLE["arrowhead"]["color"] if VECTOR_STYLE["arrowhead"]["color"] else self.color
         
-        # Create segments for the arrowhead
         segments = []
         
-        # First line from base corner 1 to tip
-        segments.append(ZSegment(
-            x1=corner1_2d[0],
-            y1=corner1_2d[1],
-            x2=tip_2d[0],
-            y2=tip_2d[1],
-            z_value=(corner1[2] + p2[2]) / 2,
-            thickness=thickness,
-            color=arrowhead_color
-        ))
-        
-        # Second line from base corner 2 to tip
-        segments.append(ZSegment(
-            x1=corner2_2d[0],
-            y1=corner2_2d[1],
-            x2=tip_2d[0],
-            y2=tip_2d[1],
-            z_value=(corner2[2] + p2[2]) / 2,
-            thickness=thickness,
-            color=arrowhead_color
-        ))
-        
-        # If filled arrowhead, add a line between the base corners
+        # Use ZArrowHead if we want a filled arrowhead
         if VECTOR_STYLE["arrowhead"]["filled"]:
+            arrow_head = ZArrowHead(
+                tip_x=tip_2d[0],
+                tip_y=tip_2d[1],
+                corner1_x=corner1_2d[0],
+                corner1_y=corner1_2d[1],
+                corner2_x=corner2_2d[0],
+                corner2_y=corner2_2d[1],
+                z_value=(p2[2] + shaft_end[2]) / 2,  # Average z-value for z-ordering
+                color=arrowhead_color,
+                filled=True
+            )
+            # Add a reference to the source vector
+            arrow_head.vector = self
+            segments.append(arrow_head)
+        else:
+            # Create line segments for an unfilled arrowhead
+            # First line from base corner 1 to tip
+            segments.append(ZSegment(
+                x1=corner1_2d[0],
+                y1=corner1_2d[1],
+                x2=tip_2d[0],
+                y2=tip_2d[1],
+                z_value=(corner1[2] + p2[2]) / 2,
+                thickness=thickness,
+                color=arrowhead_color
+            ))
+            
+            # Second line from base corner 2 to tip
+            segments.append(ZSegment(
+                x1=corner2_2d[0],
+                y1=corner2_2d[1],
+                x2=tip_2d[0],
+                y2=tip_2d[1],
+                z_value=(corner2[2] + p2[2]) / 2,
+                thickness=thickness,
+                color=arrowhead_color
+            ))
+            
+            # Base line between the base corners
             segments.append(ZSegment(
                 x1=corner1_2d[0],
                 y1=corner1_2d[1],

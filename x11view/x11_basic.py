@@ -339,12 +339,14 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
         )
         
         # Use fill_poly to create a filled triangle
+        # FIXED: Correct parameter order - shape comes before coord_mode in Python-Xlib
         self.pixmap.fill_poly(
             gc,
+            X.Convex,           # Shape (Complex, Nonconvex, Convex)
             X.CoordModeOrigin,  # Coordinates are absolute
-            X.Convex,           # We know it's a convex shape (triangle)
             [(x1, y1), (x2, y2), (x3, y3)]
         )
+
 
     # -----------------------------------------------------------
     # Improved: Text drawing with font caching

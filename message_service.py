@@ -72,6 +72,16 @@ class MessageService:
         """
         self._add_message("error", message)
         print(f"ERROR: {message}")
+
+    def log_debug(self, message):
+        """
+        Log a debug message.
+        This will print to console but won't be shown in the UI message panel.
+        
+        Parameters:
+          - message (str): The debug message to log
+        """
+        print(f"DEBUG: {message}")
     
     def get_messages(self):
         """

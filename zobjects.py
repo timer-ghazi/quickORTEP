@@ -164,13 +164,18 @@ class ZArrowHead(ZObject):
         """
         Draw the arrowhead on the canvas.
         """
-        # Use the new triangle drawing methods
+        # Use the canvas drawing methods
         if self.filled:
             # Draw as a filled triangle
+            # Convert points to integers to avoid potential type issues
+            x1, y1 = int(self.tip_x), int(self.tip_y)
+            x2, y2 = int(self.corner1_x), int(self.corner1_y)
+            x3, y3 = int(self.corner2_x), int(self.corner2_y)
+            
             canvas.draw_filled_triangle(
-                self.tip_x, self.tip_y,
-                self.corner1_x, self.corner1_y,
-                self.corner2_x, self.corner2_y,
+                x1, y1,
+                x2, y2,
+                x3, y3,
                 color=self.color
             )
         else:
@@ -193,69 +198,3 @@ class ZArrowHead(ZObject):
                 color=HIGHLIGHT["color"],
                 thickness=highlight_thickness
             )
-
-    def contains(self, x, y, tolerance=3):
-        """
-        Determine whether the point (x, y) is inside the arrowhead triangle.
-        
-        This uses a barycentric coordinate calculation to check if the point
-        is inside the triangle. A tolerance value is added to make selection easier.
-        
-        Parameters:
-            x, y: The point to test
-            tolerance: Additional radius for hit detection
-            
-        Returns:
-            bool: True if point is within the triangle (plus tolerance)
-        """
-        # First check if the point is near any of the three edges
-        edges = [
-            (self.tip_x, self.tip_y, self.corner1_x, self.corner1_y),
-            (self.tip_x, self.tip_y, self.corner2_x, self.corner2_y),
-            (self.corner1_x, self.corner1_y, self.corner2_x, self.corner2_y)
-        ]
-        
-        for x1, y1, x2, y2 in edges:
-            dx = x2 - x1
-            dy = y2 - y1
-            if dx == 0 and dy == 0:
-                continue
-                
-            # Project onto the line
-            t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)
-            t = max(0, min(1, t))
-            
-            # Calculate closest point on the line
-            cx = x1 + t * dx
-            cy = y1 + t * dy
-            
-            # Check distance
-            dist_sq = (x - cx)**2 + (y - cy)**2
-            if dist_sq <= tolerance**2:
-                return True
-        
-        # If not near any edge, check if inside the triangle using barycentric coordinates
-        # Area of the triangle
-        area_full = 0.5 * abs(
-            (self.corner1_x - self.tip_x) * (self.corner2_y - self.tip_y) -
-            (self.corner2_x - self.tip_x) * (self.corner1_y - self.tip_y)
-        )
-        
-        if area_full < 1e-6:  # Degenerate triangle
-            return False
-            
-        # Barycentric coordinates
-        alpha = 0.5 * abs(
-            (self.corner1_x - x) * (self.corner2_y - y) -
-            (self.corner2_x - x) * (self.corner1_y - y)
-        ) / area_full
-        
-        beta = 0.5 * abs(
-            (self.tip_x - x) * (self.corner2_y - y) -
-            (self.corner2_x - x) * (self.tip_y - y)
-        ) / area_full
-        
-        gamma = 1 - alpha - beta
-        
-        # If all barycentric coordinates are between 0 and 1, the point is inside
-        return 0 <= alpha <= 1 and 0 <= beta <= 1 and 0 <= gamma <= 1
