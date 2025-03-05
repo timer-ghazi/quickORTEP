@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-main.py
+quickORTEP.py
 
 Usage:
-  python main.py <xyz_file> [ss_factor=1] [tile_size=128]
+  python quickORTEP.py <xyz_file> [ss_factor=1] [tile_size=128]
 
 This replicates the old ortep-view-v2.py behavior using the refactored architecture,
 which now includes a multi-line HUD for displaying interactive information and trajectory navigation.
@@ -21,7 +21,7 @@ from config import DEFAULT_ENERGY_UNIT, ENERGY_UNITS
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: main.py <xyz_file> [ss_factor=1] [tile_size=128]")
+        print("Usage: quickORTEP.py <xyz_file> [ss_factor=1] [tile_size=128]")
         sys.exit(1)
 
     xyz_file = sys.argv[1]
