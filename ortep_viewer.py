@@ -153,6 +153,45 @@ class MoleculeViewer(X11Window):
         if self.show_axes:
             self.ortep_mol.create_coordinate_axes()
 
+        self.show_help = False  # attribute to track if help overlay is visible
+
+
+    def draw_help_overlay(self):
+        """
+        Draw a rectangle plus the cheat-sheet text,
+        using the same colors as the HUD.
+        """
+        # 1) Use the message panel’s background color for the overlay rectangle
+        overlay_color = MESSAGE_PANEL_STYLE["bg_color"]
+    
+        # 2) Use the HUD text color for the help text
+        text_color = HUD_STYLE["color"]
+    
+        # Fill the entire window with this overlay color
+        self.canvas.draw_filled_rect(0, 0, self.canvas.width, self.canvas.height, color=overlay_color)
+    
+        # 3) Pull in the cheat-sheet lines
+        from help_text import HELP_TEXT
+    
+        # 4) Decide positioning
+        x_start = 50
+        y_start = 50
+        line_spacing = 16
+
+        self.draw_grid()
+    
+        # 5) Draw each line of the cheat sheet
+        for i, line in enumerate(HELP_TEXT):
+            y_pos = y_start + i * line_spacing
+            self.canvas.draw_text(
+                x_start,
+                y_pos,
+                line,
+                color=text_color,  # from HUD
+                font_size=14       # pick size to taste
+            )
+    
+
     def draw_grid(self):
         """
         Draw a background grid with major and minor lines.
@@ -733,7 +772,7 @@ class MoleculeViewer(X11Window):
                 lines.append("Graph: Energy")
         
         # Add key bindings help
-        lines.append("Press 'a' to toggle axes, 'd' to toggle hydrogens")
+        lines.append("Press '?' for help.")
             
         self.hud_panel.update_lines(lines)
 
@@ -806,34 +845,55 @@ class MoleculeViewer(X11Window):
         self.redraw()
 
     def redraw(self):
-        # Check if window has been resized
+        """
+        Redraw the entire scene:
+          - Clear the canvas
+          - Optionally draw the grid
+          - Draw the molecule (atoms, bonds, vectors)
+          - Ensure the graph is created (energy or bond-length), then draw it
+          - Update HUD + message panel
+          - Optionally draw the help overlay
+          - Flush to screen
+        """
+        # 1) Check if window has been resized
         if self._last_canvas_width != self.canvas.width or self._last_canvas_height != self.canvas.height:
             # Window was resized, update stored dimensions
             self._last_canvas_width = self.canvas.width
             self._last_canvas_height = self.canvas.height
-            # Make sure graph position is updated on next ensure_energy_graph call
+            
+            # If there's a thumbnail graph, we may reposition it later
             if self.energy_graph is not None:
-                # We'll update the position when ensure_energy_graph is called
+                # We'll update its position when ensure_energy_graph() is called
                 pass
-        
+    
+        # 2) Clear the drawing surface
         self.canvas.clear()
-        
-        # Draw the grid if enabled in the current theme
+    
+        # 3) Draw grid if enabled
         self.draw_grid()
-        
+    
+        # 4) Draw the main molecule (atoms, bonds, vectors)
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
-        
-        # Ensure the energy graph is initialized if needed and positioned correctly
+    
+        # 5) Handle the energy/bond-length graph (thumbnail)
         self.ensure_energy_graph()
-        
-        # Draw the energy graph if it exists
         if self.energy_graph is not None:
             self.energy_graph.draw_graph()
-            
+    
+        # 6) Update the "HUD" lines (like bond info, current zoom, etc.)
         self.update_info_message()
         self.hud_panel.draw(self.canvas)
+    
+        # 7) Draw recent messages from the message panel
         self.message_panel.draw(self.canvas)
+    
+        # 8) SHOW HELP OVERLAY IF NEEDED
+        if self.show_help:
+            self.draw_help_overlay()
+    
+        # 9) Push all changes to the actual screen
         self.canvas.flush()
+
 
     def fit_molecule_to_window(self):
         from geometry_utils import rotate_point

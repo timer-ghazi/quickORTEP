@@ -121,6 +121,8 @@ class _EventHandler:
             # Reset/fit operations
             'f': self._fit_molecule_to_window,
             'r': self._reset_view,
+
+            '?': self._toggle_help,
         }
         
         # Override with configurable keys if present
@@ -147,11 +149,18 @@ class _EventHandler:
 
             # Check for shift-modified commands (Uppercase chars)
             shift_pressed = bool(evt.state & X.ShiftMask)
+
+            # If help is currently on, and user pressed ANY key except '?' again,
+            # we hide the help and return (so that it doesn't also trigger other commands).
+            if self.viewer.show_help and keychar != '?':
+                self._toggle_help()   # or set show_help = False, then redraw
+                return
             
             # Execute the command if it exists
             if keychar in self.key_commands:
                 self.key_commands[keychar]()
                 self.viewer.redraw()
+
         except Exception as e:
             self.viewer.message_service.log_error(f"Error handling key event: {str(e)}")
             # Optional debug logging
@@ -706,3 +715,19 @@ class _EventHandler:
         # Clear vector selections (if any)
         for vector in self.viewer.ortep_mol.vectors:
             vector.selected = False
+
+    def _toggle_help(self):
+        """
+        Toggle the help overlay on/off in the viewer, and also
+        print the cheat sheet to stdout if turning it on.
+        """
+        self.viewer.show_help = not self.viewer.show_help
+        if self.viewer.show_help:
+            # Print help text to console as well
+            from help_text import HELP_TEXT
+            for line in HELP_TEXT:
+                print(line)
+
+        # Force a redraw so the overlay becomes visible or hidden
+        self.viewer.redraw()
+
