@@ -275,7 +275,6 @@ class _GraphManager:
             # If no bond is selected, revert to energy mode
             self.graph_mode = "energy"
         
-        # Prepare data based on graph mode
         if self.graph_mode == "energy":
             # Skip if no trajectory is available
             if self.viewer.trajectory is None:
@@ -290,16 +289,16 @@ class _GraphManager:
             if len(energies) == 0 or np.isnan(energies).all():
                 return
             
-            # Prepare graph data
-            x_values = list(range(len(energies)))
+            # Check if coordinate or time metadata is available for the x-axis.
+            coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
+            if coord_info.get('field') is not None and len(coords) == len(energies):
+                x_values = list(coords)
+                x_axis_title = "Coord" if coord_info['field'] == "coord" else "Time"
+            else:
+                x_values = list(range(len(energies)))
+                x_axis_title = "Frame"
+            
             y_values = [e if not np.isnan(e) else 0.0 for e in energies]
-            
-            # Get unit symbol for the title
-            unit_symbol = ENERGY_UNITS.get(
-                energy_info['converted_unit'], 
-                {'symbol': energy_info['converted_unit']}
-            )['symbol']
-            
             title = "Energy"
             y_axis_title = ""
         else:
@@ -316,6 +315,7 @@ class _GraphManager:
                 title = f"{atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}"
             else:
                 title = "Bond Length"
+            x_axis_title = "Frame"
             y_axis_title = ""
         
         # Create a custom minimal theme
@@ -334,7 +334,7 @@ class _GraphManager:
                 region_y=thumb_y,
                 region_width=thumb_width,
                 region_height=thumb_height,
-                x_axis_title="",
+                x_axis_title=x_axis_title,
                 y_axis_title=y_axis_title,
                 title=title,
                 theme=custom_minimal_theme
@@ -350,7 +350,8 @@ class _GraphManager:
                     xdata=x_values,
                     ydata=y_values,
                     title=title,
-                    y_axis_title=y_axis_title
+                    y_axis_title=y_axis_title,
+                    x_axis_title=x_axis_title
                 )
 
     def calculate_bond_length_trajectory(self, atom1_idx, atom2_idx):
@@ -978,7 +979,16 @@ class MoleculeViewer(X11Window):
             lines.append("No object selected.")
             lines.append("Click to select an atom; Shift-click to multi-select.")
         lines.append(f"Zoom: {self.view_params.scale:.1f}")
-        lines.append(f"Frame: {self.current_frame} / {self.total_frames - 1}")
+        # Modify frame display to include coordinate/time metadata if available
+        if self.trajectory:
+            coords, coord_info = self.trajectory.coordinate_trajectory(skip_none=False)
+            if coord_info.get('field') is not None and len(coords) > self.current_frame and not np.isnan(coords[self.current_frame]):
+                field_label = "Coord" if coord_info['field'] == "coord" else "Time"
+                lines.append(f"Frame: {self.current_frame} / {self.total_frames - 1}, {field_label}: {coords[self.current_frame]:.3f}")
+            else:
+                lines.append(f"Frame: {self.current_frame} / {self.total_frames - 1}")
+        else:
+            lines.append(f"Frame: {self.current_frame} / {self.total_frames - 1}")
         
         # Display energy information with units and method
         if self.trajectory:

@@ -585,6 +585,63 @@ class Trajectory:
         conversion_info['converted_unit'] = conversion_info['original_unit']
         return energies, conversion_info
 
+    def coordinate_trajectory(self, skip_none=False):
+        """
+        Return a NumPy array of coordinate (or time) values across all frames,
+        extracted from the molecule metadata.
+        
+        If the metadata field 'coord' or 'time' is present in the molecule metadata,
+        that value will be used for the x-axis in plots. If both are present, 'coord'
+        is preferred. If none is found, frame indices are returned.
+        
+        Parameters:
+            skip_none (bool): If True, frames with None values will be excluded.
+        
+        Returns:
+            tuple: (np.ndarray, dict) where:
+                - np.ndarray is the array of coordinate values
+                - dict contains metadata about the extracted field (e.g., 'field': 'coord')
+        """
+        # Force loading of all frames to ensure metadata is populated
+        for i in range(len(self._raw_frames)):
+            self.get_frame(i)
+        
+        n = len(self._raw_frames)
+        
+        # Determine which metadata field to use
+        field = None
+        for i in range(n):
+            mol = self.get_frame(i)
+            if 'coord' in mol.metadata:
+                field = 'coord'
+                break
+            elif 'time' in mol.metadata:
+                field = 'time'
+                break
+        
+        if field is None:
+            # No coordinate/time metadata found; return frame indices
+            coords = np.array(list(range(n)))
+            conversion_info = {'field': None}
+            return coords, conversion_info
+        
+        # Gather coordinate values from each frame
+        coords = []
+        for i in range(n):
+            mol = self.get_frame(i)
+            value = mol.metadata.get(field, np.nan)
+            coords.append(value)
+        coords = np.array(coords)
+        
+        if skip_none:
+            coords = coords[~np.isnan(coords)]
+        
+        conversion_info = {
+            'field': field,
+            'min_value': np.nanmin(coords) if not np.isnan(coords).all() else None
+        }
+        return coords, conversion_info
+
     def print_energy_table(self, convert_if_hartrees=True, convert_to_unit=None):
         """
         Print a table of frame numbers vs. energy.
