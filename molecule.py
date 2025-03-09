@@ -5,7 +5,7 @@
 # a covalent adjacency matrix using data from elements_table.py,
 # and providing geometry utilities (distance, angle, dihedral).
 #
-# 
+#
 
 import sys
 import math
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import re
 from typing import List, Tuple, Union, Optional, Dict
 
-import pprint 
+import pprint
 
 # Make sure elements_table.py is in the same directory or installable path
 from elements_table import Elements, _DISTANCE_UNIT_ALIASES
@@ -48,6 +48,9 @@ class Molecule:
         Energy (float | None): Parsed or user-provided energy (units unspecified).
         file_name (str | None): The file name (minus .xyz) from which data was read.
         frame_number (int | None): The index or ID for this molecule in a trajectory.
+
+        metadata (Dict[str, float]): A dictionary for additional labeled numeric metadata,
+                                     e.g. "coord", "time", etc.
     """
 
     def __init__(self, title: str = ""):
@@ -61,6 +64,9 @@ class Molecule:
         self.Energy = None            # Parsed or user-supplied energy
         self.file_name = None         # File name minus .xyz
         self.frame_number = None      # Frame index in a trajectory
+
+        # Dictionary to hold arbitrary numeric metadata like coord, time, etc.
+        self.metadata = {}            # type: Dict[str, float]
 
 
     @classmethod
@@ -85,19 +91,20 @@ class Molecule:
                       units: str = "Ang",
                       xyz_comment: Optional[str] = None,
                       energy: Optional[float] = None,
-                      frame_number: Optional[int] = None) -> None:
+                      frame_number: Optional[int] = None,
+                      metadata: Optional[Dict[str, float]] = None) -> None:
         """
         Reads XYZ data from a file or directly from a string/list of lines, converts
         the coordinates to Ångströms (if necessary), and populates the molecule's
         atoms, title, and metadata fields.
 
         Parameters:
-            data: 
+            data:
                 Either a multi-line string or a list of strings representing the XYZ data.
-            file_name: 
+            file_name:
                 Path to a file containing XYZ data. If provided, this takes precedence over 'data'.
                 We also store the base file name (minus .xyz) in self.file_name.
-            units: 
+            units:
                 Units in which the coordinates are given. Defaults to "Ang" (Ångströms).
                 Other supported units include "pm", "nm", "bohr", etc.
             xyz_comment:
@@ -107,6 +114,9 @@ class Molecule:
                 Optional explicit energy, overriding anything parsed from the comment.
             frame_number:
                 If provided, identifies which frame of a trajectory this data belongs to.
+            metadata:
+                Optional dictionary of additional numeric metadata to store or override,
+                e.g. {"coord": 25.38, "time": 10.5}.
         """
         # If a file name is provided, read from file.
         if file_name is not None:
@@ -190,8 +200,6 @@ class Molecule:
         self.frame_number = frame_number
 
         # We'll decide on the final self.title
-        # If it was not set externally (the constructor might have set one),
-        # we either use the comment line or a fallback to file_name.
         if not self.title:
             if not self.XYZ_Comment:
                 # If no comment line at all, try file_name
@@ -204,17 +212,15 @@ class Molecule:
             else:
                 # We do have some comment line, but it might or might not be meaningful.
                 # We'll keep it simple: use the entire comment if not purely numeric.
-                # If you want a more detailed logic, you could do further checks.
-                # But for now, let's set title to the comment line.
-                self.title = self.XYZ_Comment
-                # If it looks like the comment line is just the energy, we can fallback to file_name:
                 if self._looks_like_just_energy(self.XYZ_Comment) and self.file_name:
                     if self.frame_number is not None:
                         self.title = f"{self.file_name}_{self.frame_number:03d}"
                     else:
                         self.title = self.file_name
+                else:
+                    self.title = self.XYZ_Comment
 
-        # Now parse the atom lines as before
+        # Now parse the atom lines
         if 'expected_atom_count' in locals() and len(atom_lines) != expected_atom_count:
             print(f"Warning: Expected {expected_atom_count} atoms, but found {len(atom_lines)} lines.")
 
@@ -241,6 +247,18 @@ class Molecule:
         n = len(self.atoms)
         self.bond_matrix = np.zeros((n, n), dtype=float)
 
+        # --- NEW: parse extra labeled metadata (excluding energy labels) ---
+        discovered_metadata = {}
+        if self.XYZ_Comment:
+            discovered_metadata = self._parse_metadata(self.XYZ_Comment)
+
+        # If user also provided metadata explicitly, merge/override
+        if metadata:
+            discovered_metadata.update(metadata)
+
+        # Store everything in self.metadata
+        self.metadata.update(discovered_metadata)
+
 
     @classmethod
     def from_xyz_data(cls,
@@ -249,7 +267,8 @@ class Molecule:
                       units: str = "Ang",
                       xyz_comment: Optional[str] = None,
                       energy: Optional[float] = None,
-                      frame_number: Optional[int] = None) -> "Molecule":
+                      frame_number: Optional[int] = None,
+                      metadata: Optional[Dict[str, float]] = None) -> "Molecule":
         """
         Convenience class method to construct a Molecule from XYZ data.
 
@@ -263,6 +282,7 @@ class Molecule:
             xyz_comment: Optional explicit comment line.
             energy: Optional explicit energy value.
             frame_number: Optional frame index.
+            metadata: Optional dictionary of labeled numeric metadata (coord, time, etc.).
         """
         mol = cls()
         mol.read_xyz_data(data=data,
@@ -270,20 +290,21 @@ class Molecule:
                           units=units,
                           xyz_comment=xyz_comment,
                           energy=energy,
-                          frame_number=frame_number)
+                          frame_number=frame_number,
+                          metadata=metadata)
         return mol
 
     def compute_distance_matrix(self) -> np.ndarray:
         """
         Computes the pairwise Euclidean distance matrix between atoms using vectorized operations.
-        
+
         If the coordinate array is defined as $C$ with shape (n, 3), the distance between any two atoms
         is given by:
-        
+
         $$
         d_{ij} = \sqrt{\sum_{k=1}^{3} (C_{ik} - C_{jk})^2}
         $$
-        
+
         Returns:
             A numpy ndarray of shape (n, n) with distances.
         """
@@ -343,7 +364,7 @@ class Molecule:
                 frag_id += 1
 
     def distance(self, i: int, j: int) -> float:
-        r""" 
+        r"""
         Returns the Euclidean distance between atoms i and j (in Å).
 
         $$
@@ -426,49 +447,49 @@ class Molecule:
     def to_standard_orientation(self, use_atomic_numbers: bool = True) -> None:
         """
         Converts the molecule's atomic coordinates to a standard orientation.
-        
+
         The procedure is as follows:
-        
-        1. **Centering**  
-        2. **Inertia Tensor Construction**  
-        3. **Diagonalization**  
-        4. **Rotation Matrix Construction**  
-        5. **Coordinate Transformation**  
+
+        1. **Centering**
+        2. **Inertia Tensor Construction**
+        3. **Diagonalization**
+        4. **Rotation Matrix Construction**
+        5. **Coordinate Transformation**
         """
         coords = np.array([[atom.x, atom.y, atom.z] for atom in self.atoms])
-        
+
         # Compute weights based on atomic numbers or masses.
         if use_atomic_numbers:
             weights = np.array([Elements.atomic_number(atom.symbol) for atom in self.atoms])
         else:
             weights = np.array([Elements.mass(atom.symbol) for atom in self.atoms])
-        
+
         # Step 1: Compute center and centered coordinates.
         coords_centered, T = self._compute_center(coords, weights)
-        
+
         # Step 2: Construct the inertia tensor.
         I = self._compute_inertia_tensor(coords_centered, weights)
-        
+
         # Step 3: Diagonalize the inertia tensor.
         eigenvalues, eigenvectors = self._diagonalize_inertia_tensor(I)
-        
+
         # Step 4: Build the rotation matrix from eigenvectors.
         R = self._build_rotation_matrix(eigenvalues, eigenvectors)
-        
+
         # Step 5: Rotate the centered coordinates.
         coords_std = self._apply_transformation(coords_centered, R)
-        
+
         # Update the atom coordinates.
         self._update_atom_coordinates(coords_std)
 
     def _compute_center(self, coords: np.ndarray, weights: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Computes the center of mass (or nuclear charge) and returns the centered coordinates.
-        
+
         Parameters:
             coords: Array of atomic coordinates.
             weights: Array of weights (atomic numbers or masses) for each atom.
-        
+
         Returns:
             A tuple (coords_centered, T) where T is the computed center.
         """
@@ -480,11 +501,11 @@ class Molecule:
     def _compute_inertia_tensor(self, coords_centered: np.ndarray, weights: np.ndarray) -> np.ndarray:
         """
         Constructs the inertia tensor from centered coordinates and weights.
-        
+
         Parameters:
             coords_centered: Centered atomic coordinates.
             weights: Array of weights for each atom.
-        
+
         Returns:
             A 3x3 inertia tensor.
         """
@@ -506,7 +527,7 @@ class Molecule:
     def _diagonalize_inertia_tensor(self, I: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Diagonalizes the inertia tensor.
-        
+
         Returns:
             (eigenvalues, eigenvectors), sorted in ascending order of eigenvalues.
         """
@@ -572,7 +593,7 @@ class Molecule:
             <number of atoms>
             <title>
             <atom symbol> <x> <y> <z>
-        
+
         Each atom line is formatted with the atomic symbol left-aligned in a field of 5 characters,
         and each coordinate is printed in a field of 17 characters with 12 decimal places.
         """
@@ -580,7 +601,7 @@ class Molecule:
         # First line: the number of atoms.
         lines.append(f"{len(self.atoms)}")
         # Second line: use the molecule's title if provided
-        comment = self.title 
+        comment = self.title
         lines.append(comment)
         # Format each atom line.
         for atom in self.atoms:
@@ -592,7 +613,7 @@ class Molecule:
         """
         Attempt to parse a floating-point energy from the given comment line using a
         tiered approach:
-        
+
         1) Look for a labeled pattern like "Energy=...", "E=...", ignoring case.
         2) If not found, see if there's exactly one float in the entire line.
         3) Otherwise, return None.
@@ -601,7 +622,6 @@ class Molecule:
             return None
 
         # Step 1: labeled pattern (case-insensitive)
-        # e.g. E= -75.1234, Energy: +0.45, etc.
         labeled_pattern = r"(?i)(?:energy|e)\s*[:=]?\s*([-+]?\d+(\.\d+)?([eE][+-]?\d+)?)"
         match = re.search(labeled_pattern, comment_line)
         if match:
@@ -637,23 +657,71 @@ class Molecule:
             comment_line
         )
 
-        # If there's exactly 1 float, and the rest is basically "energy/E" text, treat it as just energy
+        # If there's exactly 1 float, and the rest is basically "energy/E" text,
+        # treat it as just energy
         if len(all_floats) == 1:
-            # Let's strip out the float, then see if the remaining text is small or
-            # mostly energy-like words. We'll do a quick length check:
-            without_float = re.sub(r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?", "", comment_line)
+            without_float = re.sub(
+                r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?",
+                "",
+                comment_line
+            )
             if len(without_float.strip()) < 15:  # arbitrary threshold
                 return True
 
-        # If more than 1 float, definitely not "just" energy
         return False
+
+    # ---------------------------------------------------------------------
+    # NEW METHOD: parse labeled numeric metadata (excluding energy labels).
+    # ---------------------------------------------------------------------
+    @staticmethod
+    def _parse_metadata(comment_line: str) -> Dict[str, float]:
+        """
+        Parses labeled numeric metadata fields from the comment line.
+        For example, "coord= 25.38", "time=10.5", etc.
+
+        Returns a dictionary {<field>: <float_value>}.
+
+        Note: We do NOT parse 'energy' or 'e' here, to avoid conflicting
+              with the special single-float energy logic.
+        """
+        results = {}
+        if not comment_line.strip():
+            return results
+
+        # Known label variants for reaction coordinate or time, etc.
+        known_labels = {
+            "coord": ["coord", "coordinate"],
+            "time": ["t", "time"],
+        }
+        # You can expand 'known_labels' as needed, e.g. add "step", "temp", etc.
+
+        # Build one combined pattern: label + '=' + float
+        # We'll do something like: (?i)\b(coord|coordinate|t|time)\s*[:=]\s*([float])
+        label_group = "|".join(
+            label for variants in known_labels.values() for label in variants
+        )
+        pattern = (
+            rf"(?i)\b({label_group})\s*[:=]\s*"
+            r"([-+]?\d+(\.\d+)?([eE][+-]?\d+)?)"
+        )
+
+        for match in re.finditer(pattern, comment_line):
+            raw_label = match.group(1).lower()  # e.g. "coord", "coordinate", "t", etc.
+            value_str = match.group(2)         # e.g. "25.38"
+            # Map raw_label to our canonical key
+            for canonical_field, variants in known_labels.items():
+                if raw_label in variants:
+                    results[canonical_field] = float(value_str)
+                    break
+
+        return results
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python molecule.py <xyz_file>")
         sys.exit(1)
-    
+
     xyz_file = sys.argv[1]
     # Example of direct parsing using the instance method
     mol = Molecule().from_xyz_data(file_name=xyz_file)
@@ -680,7 +748,7 @@ if __name__ == "__main__":
             for j in range(n)
         )
         print(f"{i:>2}  {row_str}")
-    
+
     # Example geometry checks
     if n >= 2:
         d_01 = mol.distance(0, 1)
@@ -696,3 +764,4 @@ if __name__ == "__main__":
     print(f"  Energy:       {mol.Energy}")
     print(f"  file_name:    {mol.file_name}")
     print(f"  frame_number: {mol.frame_number}")
+    print(f"  extra metadata dictionary: {mol.metadata}")
