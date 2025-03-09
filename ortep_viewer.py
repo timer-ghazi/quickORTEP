@@ -794,6 +794,10 @@ class MoleculeViewer(X11Window):
         self.show_hydrogens = self._view_manager.show_hydrogens
         self.show_axes = self._view_manager.show_axes
         self.show_help = self._view_manager.show_help
+        
+        # Expose graph properties for compatibility with event_handler
+        self.energy_graph = None  # This will be updated when _graph_manager creates it
+        self.graph_mode = "energy"  # Initialize to match _graph_manager
 
     # --- Public API Methods ---
 
@@ -813,6 +817,7 @@ class MoleculeViewer(X11Window):
         
         # Reset the energy graph so it will be recreated with the new trajectory data
         self._graph_manager.energy_graph = None
+        self.energy_graph = None  # Keep viewer's property in sync
         
         # Log energy unit information
         energies, energy_info = trajectory.energy_trajectory(
@@ -867,6 +872,9 @@ class MoleculeViewer(X11Window):
         # Update the energy graph if it exists
         if self._graph_manager.energy_graph is not None:
             self._graph_manager.energy_graph.update_current_frame(frame_index)
+            # Keep viewer's energy_graph property in sync for compatibility with event_handler
+            self.energy_graph = self._graph_manager.energy_graph
+            self.graph_mode = self._graph_manager.graph_mode
 
         # Check if the selected bond for the graph still exists
         self._graph_manager.check_selected_bond_exists()
@@ -927,6 +935,9 @@ class MoleculeViewer(X11Window):
         self._graph_manager.ensure_energy_graph()
         if self._graph_manager.energy_graph is not None:
             self._graph_manager.energy_graph.draw_graph()
+            # Keep viewer's properties synchronized
+            self.energy_graph = self._graph_manager.energy_graph
+            self.graph_mode = self._graph_manager.graph_mode
     
         # Update the HUD and message panel
         self._update_ui()
@@ -1027,6 +1038,9 @@ class MoleculeViewer(X11Window):
     def toggle_graph_mode(self):
         """Toggle between energy and bond length visualization modes."""
         self._graph_manager.toggle_graph_mode()
+        # Update viewer's properties for compatibility
+        self.energy_graph = self._graph_manager.energy_graph
+        self.graph_mode = self._graph_manager.graph_mode
 
     def toggle_normal_modes(self):
         """Toggle display of normal mode vectors."""
