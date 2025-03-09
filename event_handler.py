@@ -656,7 +656,8 @@ class _EventHandler:
             )
             
             # Suggest bond length graph if in energy mode
-            if self.viewer.energy_graph is not None and self.viewer.graph_mode == "energy":
+            if self.viewer._graph_manager.energy_graph is not None and self.viewer._graph_manager.graph_mode == "energy":
+            #if self.viewer.energy_graph is not None and self.viewer.graph_mode == "energy":
                 self.viewer.message_service.log_info(
                     "Press 'p' to show bond length plot"
                 )
