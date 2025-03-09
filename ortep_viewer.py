@@ -33,7 +33,7 @@ from vectors import Vector
 from selection_manager import _SelectionManager
 from trajectory_manager import _TrajectoryManager
 from event_handler import _EventHandler
-from export import export_svg
+from export import export_svg, export_xyz
 from help_text import HELP_TEXT
 
 
@@ -1075,6 +1075,32 @@ class MoleculeViewer(X11Window):
     def hit_test(self, x, y):
         """Perform hit testing to see what's under the cursor."""
         return self._view_manager.hit_test(x, y)
+
+    def dump_xyz(self):
+        """
+        Export the current frame to an XYZ file, with dynamic filename based on
+        the loaded trajectory file and current frame.
+        """
+        if not self.trajectory:
+            self.message_service.log_info("No trajectory data available to export")
+            return
+    
+        # Generate filename based on trajectory metadata
+        base_name = self.trajectory.metadata.get('file_name', 'quickORTEP')
+    
+        # For multi-frame files, include the frame number
+        if self.total_frames > 1:
+            # Zero-pad the frame number to 3 digits
+            frame_num = str(self.current_frame).zfill(3)
+            filename = f"{base_name}_{frame_num}.xyz"
+        else:
+            filename = f"{base_name}.xyz"
+    
+        # Get the original molecule from the trajectory
+        original_mol = self.trajectory.get_frame(self.current_frame)
+    
+        # Export using the molecule's to_xyz method
+        export_xyz(original_mol, filename, self.message_service)
 
     def dump_svg(self):
         """

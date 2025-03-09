@@ -9,6 +9,31 @@ It currently supports exporting the rendered view to an SVG file.
 from config import PRINT_THEME, ATOM_STYLE, COVALENT_BOND, NCI_BOND, TS_BOND, DISTANCE_BOND, HIGHLIGHT
 from x11view.svg_canvas import SVGCanvas
 
+def export_xyz(molecule, filename="export.xyz", message_service=None):
+    """
+    Export a molecule to an XYZ file.
+
+    Parameters:
+        molecule: The Molecule instance to export
+        filename (str): The name of the output XYZ file
+        message_service: Optional MessageService instance for sending status messages
+
+    Returns:
+        The filename of the exported XYZ file
+    """
+    # Get XYZ format as string
+    xyz_content = molecule.to_xyz()
+
+    # Write to file
+    with open(filename, 'w') as f:
+        f.write(xyz_content)
+
+    # Send a status message if message_service is provided
+    if message_service:
+        message_service.log_info(f"XYZ export saved to {filename}")
+
+    return filename
+
 def export_svg(canvas, renderer, molecule, view_params, filename="quickORTEP_export.svg", message_service=None):
     """
     Export the current view to an SVG file using the PRINT_THEME.

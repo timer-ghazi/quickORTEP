@@ -90,6 +90,7 @@ class _EventHandler:
             
             # Export/Save
             's': self._dump_svg,
+            'x': self._dump_xyz,
             
             # Display options
             'd': self._toggle_hydrogens,
@@ -360,6 +361,10 @@ class _EventHandler:
     def _dump_svg(self):
         """Export the current view as SVG."""
         self.viewer.dump_svg()
+
+    def _dump_xyz(self):
+        """Export the current frame as XYZ."""
+        self.viewer.dump_xyz()
     
     def _toggle_hydrogens(self):
         """Toggle the display of hydrogen atoms."""
