@@ -13,6 +13,7 @@ HELP_TEXT = [
     " f => fit molecule                                   g => toggle grid              ",
     " r => reset view                                     a => toggle axes              ",
     " q / Esc => quit                                     s => export SVG               ",
+    "                                                     x => export XYZ               ",
     "",
     " MOUSE COMMANDS",
     " Left drag => rotate         Middle drag => rotate Z",
