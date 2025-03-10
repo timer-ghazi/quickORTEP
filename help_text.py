@@ -14,6 +14,7 @@ HELP_TEXT = [
     " r => reset view                                     a => toggle axes              ",
     " q / Esc => quit                                     s => export SVG               ",
     "                                                     x => export XYZ               ",
+    "                                                     w => export current graph data",
     "",
     " MOUSE COMMANDS",
     " Left drag => rotate         Middle drag => rotate Z",

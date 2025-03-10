@@ -91,6 +91,7 @@ class _EventHandler:
             # Export/Save
             's': self._dump_svg,
             'x': self._dump_xyz,
+            'w': self._dump_graph_data,
             
             # Display options
             'd': self._toggle_hydrogens,
@@ -365,6 +366,10 @@ class _EventHandler:
     def _dump_xyz(self):
         """Export the current frame as XYZ."""
         self.viewer.dump_xyz()
+
+    def _dump_graph_data(self):
+        """Dump the current graph data to a file."""
+        self.viewer.dump_graph_data()
     
     def _toggle_hydrogens(self):
         """Toggle the display of hydrogen atoms."""

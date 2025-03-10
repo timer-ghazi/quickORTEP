@@ -380,6 +380,143 @@ class _GraphManager:
         
         return x_values, y_values
 
+    def export_graph_data(self, filename=None):
+        """
+        Export the current graph data (energy or bond length) to a space-delimited data file.
+        
+        Parameters:
+            filename (str): Optional filename override. If None, generates a filename
+                            based on the trajectory metadata and current graph mode.
+        """
+        if not self.viewer.trajectory:
+            self.viewer.message_service.log_info("No trajectory data available to export")
+            return
+            
+        # Check if we have a graph to export
+        if self.energy_graph is None:
+            self.viewer.message_service.log_info("No graph data available to export")
+            return
+            
+        # Get base name for the output file
+        base_name = self.viewer.trajectory.metadata.get('file_name', 'quickORTEP')
+        
+        # Determine the suffix based on graph mode
+        if self.graph_mode == "energy":
+            suffix = "Energy"
+        else:  # bond length mode
+            if self.selected_bond_for_graph:
+                atom1_idx, atom2_idx = self.selected_bond_for_graph
+                # Get atom symbols for the suffix
+                atom1 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom1_idx), None)
+                atom2 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom2_idx), None)
+                if atom1 and atom2:
+                    suffix = f"{atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}"
+                else:
+                    suffix = "Bond"
+            else:
+                suffix = "Bond"
+        
+        # Generate filename
+        if filename is None:
+            filename = f"{base_name}_{suffix}.dat"
+        
+        # Get data directly from the graph object
+        x_values = self.energy_graph.xdata
+        y_values = self.energy_graph.ydata
+        
+        # Write the data to file
+        try:
+            with open(filename, 'w') as f:
+                # Write header
+                if self.graph_mode == "energy":
+                    # Add unit information if available
+                    _, energy_info = self.viewer.trajectory.energy_trajectory(
+                        convert_if_hartrees=True, 
+                        convert_to_unit=DEFAULT_ENERGY_UNIT
+                    )
+                    unit_symbol = ENERGY_UNITS.get(
+                        energy_info['converted_unit'], 
+                        {'symbol': energy_info['converted_unit']}
+                    )['symbol']
+                    
+                    if energy_info['normalized']:
+                        f.write(f"# Frame Energy({unit_symbol}, relative to min)\n")
+                    else:
+                        f.write(f"# Frame Energy({unit_symbol})\n")
+                else:
+                    f.write(f"# Frame BondLength(Å)\n")
+                    
+                # Write data points
+                for x, y in zip(x_values, y_values):
+                    f.write(f"{x} {y}\n")
+            
+            self.viewer.message_service.log_info(f"Graph data exported to {filename}")
+        except Exception as e:
+            self.viewer.message_service.log_error(f"Error exporting graph data: {str(e)}")
+
+    
+    def _get_energy_graph_data(self):
+        """
+        Get the energy data for exporting.
+        
+        Returns:
+            tuple: (x_values, y_values, suffix)
+                - x_values: List of x-axis values (frames or coordinates)
+                - y_values: List of energy values
+                - suffix: String for filename suffix ("Energy")
+        """
+        # Get energy data using the trajectory method
+        energies, energy_info = self.viewer.trajectory.energy_trajectory(
+            convert_if_hartrees=True,
+            convert_to_unit=DEFAULT_ENERGY_UNIT
+        )
+        
+        # Get x-axis values (check if using coordinate or time data)
+        coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
+        if coord_info.get('field') is not None and len(coords) == len(energies):
+            x_values = list(coords)
+        else:
+            x_values = list(range(len(energies)))
+        
+        # Convert any NaN values to a string representation for the file
+        y_values = []
+        for e in energies:
+            if np.isnan(e):
+                y_values.append("NaN")
+            else:
+                y_values.append(e)
+        
+        return x_values, y_values, "Energy"
+    
+    def _get_bond_length_graph_data(self):
+        """
+        Get the bond length data for exporting.
+        
+        Returns:
+            tuple: (x_values, y_values, suffix)
+                - x_values: List of frame numbers
+                - y_values: List of bond lengths
+                - suffix: String for filename suffix (e.g., "C1-O2")
+        """
+        if not self.selected_bond_for_graph:
+            return [], [], "Bond"
+            
+        # Get the selected bond
+        atom1_idx, atom2_idx = self.selected_bond_for_graph
+        
+        # Get atom symbols for the suffix
+        atom1 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom1_idx), None)
+        atom2 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom2_idx), None)
+        
+        if atom1 and atom2:
+            suffix = f"{atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}"
+        else:
+            suffix = "Bond"
+        
+        # Calculate bond lengths across trajectory
+        x_values, y_values = self.calculate_bond_length_trajectory(atom1_idx, atom2_idx)
+        
+
     def toggle_graph_mode(self):
         """Toggle between energy and bond length visualization modes."""
         if self.viewer.selected_bonds and len(self.viewer.selected_bonds) == 1:
@@ -1133,6 +1270,13 @@ class MoleculeViewer(X11Window):
         
         export_svg(self.canvas, self.renderer, self.ortep_mol, self.view_params, 
                    filename, self.message_service)
+
+    def dump_graph_data(self):
+        """
+        Export the current graph data to a file.
+        Delegates to the _GraphManager to handle the export.
+        """
+        self._graph_manager.export_graph_data()
     
     # --- Event Handling Methods (delegated to EventHandler) ---
     
