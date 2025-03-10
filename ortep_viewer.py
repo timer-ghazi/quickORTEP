@@ -269,26 +269,26 @@ class _GraphManager:
         thumb_margin = GRAPH_SETTINGS["thumbnail_margin"]
         thumb_x = self.viewer.canvas.width - thumb_width - thumb_margin
         thumb_y = self.viewer.canvas.height - thumb_height - thumb_margin
-        
+    
         # If we're in bond length mode, ensure we have a selected bond
         if self.graph_mode == "bond_length" and self.selected_bond_for_graph is None:
             # If no bond is selected, revert to energy mode
             self.graph_mode = "energy"
-        
+    
         if self.graph_mode == "energy":
             # Skip if no trajectory is available
             if self.viewer.trajectory is None:
                 return
-            
+    
             # Get energy data using the energy_trajectory method with unit conversion
             energies, energy_info = self.viewer.trajectory.energy_trajectory(
                 convert_if_hartrees=True,
                 convert_to_unit=DEFAULT_ENERGY_UNIT
             )
-            
+    
             if len(energies) == 0 or np.isnan(energies).all():
                 return
-            
+    
             # Check if coordinate or time metadata is available for the x-axis.
             coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
             if coord_info.get('field') is not None and len(coords) == len(energies):
@@ -297,7 +297,7 @@ class _GraphManager:
             else:
                 x_values = list(range(len(energies)))
                 x_axis_title = "Frame"
-            
+    
             y_values = [e if not np.isnan(e) else 0.0 for e in energies]
             title = "Energy"
             y_axis_title = ""
@@ -306,22 +306,21 @@ class _GraphManager:
             atom1_idx, atom2_idx = self.selected_bond_for_graph
             atom1 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom1_idx), None)
             atom2 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom2_idx), None)
-            
-            # Get bond length data
-            x_values, y_values = self.calculate_bond_length_trajectory(atom1_idx, atom2_idx)
-            
+    
+            # Get bond length data with coordinate/time if available
+            x_values, y_values, x_axis_title = self.calculate_bond_length_trajectory(atom1_idx, atom2_idx)
+    
             # Prepare title with atom symbols
             if atom1 and atom2:
                 title = f"{atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}"
             else:
                 title = "Bond Length"
-            x_axis_title = "Frame"
             y_axis_title = ""
-        
+    
         # Create a custom minimal theme
         custom_minimal_theme = MINIMAL_THEME.copy()
         custom_minimal_theme["margin"] = {"left": 10, "right": 10, "top": 10, "bottom": 10}
-        
+    
         if self.energy_graph is None:
             # Create the graph
             self.energy_graph = GraphViewer(
@@ -343,7 +342,7 @@ class _GraphManager:
             # Update existing graph position
             self.energy_graph.region_x = thumb_x
             self.energy_graph.region_y = thumb_y
-            
+    
             # Update data if the mode changed
             if self.energy_graph.title != title:
                 self.energy_graph.update_data(
@@ -353,6 +352,7 @@ class _GraphManager:
                     y_axis_title=y_axis_title,
                     x_axis_title=x_axis_title
                 )
+    
 
     def calculate_bond_length_trajectory(self, atom1_idx, atom2_idx):
         """
@@ -360,25 +360,33 @@ class _GraphManager:
         
         Parameters:
             atom1_idx, atom2_idx (int): Atom indices
-            
+                
         Returns:
-            tuple: (x_values, y_values) where x_values are frame numbers and 
-                   y_values are bond lengths in Ångströms
+            tuple: (x_values, y_values, x_axis_title) where:
+                - x_values are frame numbers or coordinate/time values
+                - y_values are bond lengths in Ångströms
+                - x_axis_title describes the x-axis ("Frame", "Coord", or "Time")
         """
         if self.viewer.trajectory is None:
-            return [], []
+            return [], [], "Frame"
         
-        x_values = list(range(self.viewer.total_frames))
+        # Calculate bond lengths across all frames
         y_values = []
-        
         for frame_idx in range(self.viewer.total_frames):
-            # Get the molecule for this frame (without changing the current frame)
             mol = self.viewer.trajectory.get_frame(frame_idx)
-            # Calculate distance between the atoms (0-indexed in molecule_nci)
             distance = mol.distance(atom1_idx-1, atom2_idx-1)
             y_values.append(distance)
         
-        return x_values, y_values
+        # Check if coordinate or time metadata is available for the x-axis
+        coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
+        if coord_info.get('field') is not None and len(coords) == len(y_values):
+            x_values = list(coords)
+            x_axis_title = "Coord" if coord_info['field'] == "coord" else "Time"
+        else:
+            x_values = list(range(self.viewer.total_frames))
+            x_axis_title = "Frame"
+        
+        return x_values, y_values, x_axis_title
 
     def export_graph_data(self, filename=None):
         """
@@ -400,9 +408,14 @@ class _GraphManager:
         # Get base name for the output file
         base_name = self.viewer.trajectory.metadata.get('file_name', 'quickORTEP')
         
-        # Determine the suffix based on graph mode
+        # Determine the suffix and x-axis title based on graph mode
+        x_axis_title = "Frame"  # Default
         if self.graph_mode == "energy":
             suffix = "Energy"
+            # Check if coordinate or time data is used
+            coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
+            if coord_info.get('field') is not None:
+                x_axis_title = "Coord" if coord_info['field'] == "coord" else "Time"
         else:  # bond length mode
             if self.selected_bond_for_graph:
                 atom1_idx, atom2_idx = self.selected_bond_for_graph
@@ -413,6 +426,9 @@ class _GraphManager:
                     suffix = f"{atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}"
                 else:
                     suffix = "Bond"
+                
+                # Get x-axis title from bond length trajectory function
+                _, _, x_axis_title = self.calculate_bond_length_trajectory(atom1_idx, atom2_idx)
             else:
                 suffix = "Bond"
         
@@ -440,11 +456,11 @@ class _GraphManager:
                     )['symbol']
                     
                     if energy_info['normalized']:
-                        f.write(f"# Frame Energy({unit_symbol}, relative to min)\n")
+                        f.write(f"# {x_axis_title} Energy({unit_symbol}, relative to min)\n")
                     else:
-                        f.write(f"# Frame Energy({unit_symbol})\n")
+                        f.write(f"# {x_axis_title} Energy({unit_symbol})\n")
                 else:
-                    f.write(f"# Frame BondLength(Å)\n")
+                    f.write(f"# {x_axis_title} BondLength(Å)\n")
                     
                 # Write data points
                 for x, y in zip(x_values, y_values):
