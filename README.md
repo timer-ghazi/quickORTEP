@@ -2,7 +2,15 @@
 
 A lightweight, fast molecular visualization tool with interactive bond editing, trajectory analysis, and normal mode visualization capabilities.
 
-![quickORTEP Visualization](screenshot.png)
+![quickORTEP Visualization](images/qo-1.png)
+
+![Frequency Display](images/qo-2.png)
+
+![Help Screen](images/qo-3.png)
+
+![Light Theme, Supersampled](images/qo-4.png)
+
+![SVG Export](images/qo-5.svg)
 
 ## Overview
 
@@ -25,11 +33,24 @@ quickORTEP is a Python-based molecular visualization tool inspired by the classi
 ### Dependencies
 
 - Python 3.6+
-- python-xlib
-- numpy
-- PIL (Pillow)
+- numpy (≥1.19.0)
+- python-xlib (≥0.31)
+- Pillow (≥8.0.0)
+- X11 display server (native on Linux, XQuartz on macOS)
 
-### Installing from Source
+### Installation Methods
+
+#### Option 1: Install via pip (recommended)
+
+```bash
+# From the project directory
+pip install .
+
+# Or directly from GitHub
+pip install git+https://github.com/yourusername/quickORTEP.git
+```
+
+#### Option 2: Install from source
 
 ```bash
 # Clone the repository
@@ -37,10 +58,42 @@ git clone https://github.com/yourusername/quickORTEP.git
 cd quickORTEP
 
 # Install dependencies
-pip install python-xlib numpy pillow
+pip install numpy python-xlib pillow
 
-# Make the main script executable
-chmod +x quickORTEP.py
+# Run directly
+python quickORTEP.py molecule.xyz
+```
+
+### Platform-Specific Notes
+
+#### Linux
+The application should work out of the box on most Linux distributions as they include X11 by default.
+
+#### macOS
+You'll need to install XQuartz to provide X11 support:
+
+```bash
+# Using Homebrew
+brew install --cask xquartz
+
+# Then restart your computer to complete XQuartz installation
+```
+
+#### Windows
+This application uses X11 which is not natively available on Windows. You have two options:
+1. Use WSL (Windows Subsystem for Linux) with an X server like VcXsrv or Xming
+2. Use Cygwin with X11 packages installed
+
+### Verifying Installation
+
+After installation, you should be able to run the application using:
+
+```bash
+# If installed via pip
+quickortep molecule.xyz
+
+# Or if running from source
+python quickORTEP.py molecule.xyz
 ```
 
 ## Basic Usage
@@ -229,4 +282,3 @@ The project is organized into several modules:
 ## Acknowledgments
 
 Coded using the following LLMs: ChatGPT (o1 Pro and o3-mini-high) and Claude (3.7 Sonnet Extended)
-
