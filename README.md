@@ -50,7 +50,17 @@ pip install .
 pip install git+https://github.com/yourusername/quickORTEP.git
 ```
 
-#### Option 2: Install from source
+#### Option 2: Install using setup.py directly
+
+```bash
+# From the project directory
+python setup.py install
+
+# For development installation (changes to code reflect immediately)
+python setup.py develop
+```
+
+#### Option 3: Install from source without installation
 
 ```bash
 # Clone the repository
@@ -62,6 +72,15 @@ pip install numpy python-xlib pillow
 
 # Run directly
 python quickORTEP.py molecule.xyz
+```
+
+### After Installation
+
+When installed via pip or setup.py, you can run the application from any directory:
+
+```bash
+# Run the application from any location
+quickortep molecule.xyz
 ```
 
 ### Platform-Specific Notes
@@ -89,7 +108,7 @@ This application uses X11 which is not natively available on Windows. You have t
 After installation, you should be able to run the application using:
 
 ```bash
-# If installed via pip
+# If installed via pip or setup.py
 quickortep molecule.xyz
 
 # Or if running from source
@@ -101,20 +120,20 @@ python quickORTEP.py molecule.xyz
 ### Starting the Viewer
 
 ```bash
-# Basic usage
-python quickORTEP.py molecule.xyz
+# Basic usage (recommended)
+quickortep molecule.xyz
 
-# With anti-aliasing (2x supersampling)
-python quickORTEP.py molecule.xyz 2
+# With anti-aliasing (2x supersampling) - experimental, significantly slower
+quickortep molecule.xyz 2
 
 # With custom tile size for larger displays
-python quickORTEP.py molecule.xyz 2 256
+quickortep molecule.xyz 2 256
 ```
 
 ### Command Line Arguments
 
 - **Argument 1**: Path to molecular structure file (required, XYZ or Gaussian output)
-- **Argument 2**: Supersampling factor for anti-aliasing (optional, default=1)
+- **Argument 2**: Supersampling factor for anti-aliasing (optional, default=1, values > 1 enable experimental anti-aliasing which is much slower)
 - **Argument 3**: Tile size for rendering (optional, default=128)
 
 ## User Interface
@@ -226,12 +245,14 @@ Press 's' to export the current view as an SVG file, which is useful for creatin
 
 ### Anti-aliasing
 
-For better visual quality, use supersampling:
+For better visual quality, you can use supersampling, though be aware that this feature is experimental and can be significantly slower than the standard rendering mode:
 
 ```bash
-python quickORTEP.py molecule.xyz 2  # 2x supersampling
-python quickORTEP.py molecule.xyz 4  # 4x supersampling (slower but higher quality)
+quickortep molecule.xyz 2  # 2x supersampling
+quickortep molecule.xyz 4  # 4x supersampling (much slower but higher quality)
 ```
+
+Note: The supersampled mode is not generally recommended for regular use due to performance considerations, especially on older hardware or for complex molecules.
 
 ### Customizing Appearance
 
