@@ -124,6 +124,8 @@ class _EventHandler:
             'f': self._fit_molecule_to_window,
             'r': self._reset_view,
 
+            'R': self._reload_file,
+
             '?': self._toggle_help,
         }
         
@@ -308,6 +310,11 @@ class _EventHandler:
             self.viewer.active_button = None
 
     # Command implementation methods
+
+    def _reload_file(self):  # <<< NEW
+        """Reload the current file from disk."""
+        self.viewer.reload_file()
+        self.viewer.redraw()
     
     def _quit_application(self):
         """Quit the application."""

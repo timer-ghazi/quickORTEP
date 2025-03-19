@@ -1293,6 +1293,37 @@ class MoleculeViewer(X11Window):
         Delegates to the _GraphManager to handle the export.
         """
         self._graph_manager.export_graph_data()
+
+
+    def reload_file(self):  
+        """
+        Reload the currently loaded file from disk if possible.
+        """
+        if not self.trajectory:
+            self.message_service.log_info("No trajectory loaded; cannot reload.")
+            return
+
+        path = self.trajectory.metadata.get("path", None)
+        if not path:
+            self.message_service.log_info("Could not find a file path in trajectory metadata.")
+            return
+
+        self.message_service.log_info(f"Reloading file from disk: {path}")
+        try:
+            from trajectory import Trajectory
+            old_frame = self.current_frame
+
+            new_traj = Trajectory.from_file(path)
+            self.set_trajectory(new_traj)
+            # If the old frame index is still valid, go back to it
+            if old_frame >= self.total_frames:
+                old_frame = self.total_frames - 1
+            self.set_frame(old_frame)
+
+            self.message_service.log_info("File successfully reloaded.")
+        except Exception as e:
+            self.message_service.log_error(f"Failed to reload file: {str(e)}")
+
     
     # --- Event Handling Methods (delegated to EventHandler) ---
     

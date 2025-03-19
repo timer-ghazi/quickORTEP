@@ -11,7 +11,7 @@ HELP_TEXT = [
     " J,K => pan Y          , / . => prev/next mode       c => clear bond edits         ",
     " n,m => zoom in/out    < / > => scale normal modes   d => show/hide hydrogens      ",
     " f => fit molecule                                   g => toggle grid              ",
-    " r => reset view                                     a => toggle axes              ",
+    " r => reset view       R => reload current file      a => toggle axes              ",
     " q / Esc => quit                                     s => export SVG               ",
     "                                                     x => export XYZ               ",
     "                                                     w => export current graph data",
