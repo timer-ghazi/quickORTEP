@@ -100,9 +100,9 @@ class SVGCanvas:
         # Compute start and end points.
         angle_start_rad = math.radians(angle_start_deg)
         angle_end_rad = math.radians(angle_end_deg)
-        x_start = cx + rx * math.cos(angle_start_rad)
+        x_start = cx - rx * math.cos(angle_start_rad)
         y_start = cy + ry * math.sin(angle_start_rad)
-        x_end = cx + rx * math.cos(angle_end_rad)
+        x_end = cx - rx * math.cos(angle_end_rad)
         y_end = cy + ry * math.sin(angle_end_rad)
         # Determine if the arc spans more than 180 degrees.
         large_arc_flag = 1 if ((angle_end_deg - angle_start_deg) % 360) > 180 else 0
