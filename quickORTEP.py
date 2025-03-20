@@ -67,8 +67,19 @@ def main():
                               ss_factor=ss_factor, tile_size=tile_size)
     
     # Pass the trajectory to the viewer using the proper method
+#     viewer.set_trajectory(traj)
+#     viewer.current_frame = 0  # This might be redundant now since set_trajectory sets total_frames
     viewer.set_trajectory(traj)
-    viewer.current_frame = 0  # This might be redundant now since set_trajectory sets total_frames
+    
+    # Set the initial frame based on file type
+    if traj.metadata.get('format') == 'gaussian':
+        # For Gaussian files, start with the last frame (typically the optimized structure)
+        viewer.current_frame = viewer.total_frames - 1
+        viewer.set_frame(viewer.current_frame)
+    else:
+        # For other files, start with the first frame
+        viewer.current_frame = 0
+        viewer.set_frame(viewer.current_frame)
     
     # Log molecule and trajectory information
     filename = os.path.basename(xyz_file)
@@ -118,8 +129,13 @@ def main():
     # Log rendering settings
     if ss_factor > 1:
         viewer.message_service.log_info(f"Anti-aliasing enabled (factor: {ss_factor}, tile size: {tile_size})")
-    
+
     viewer.fit_molecule_to_window()  # Adjust zoom and centering so the molecule fits
+
+    # Show normal mode prompt if on the appropriate frame
+    if viewer._normal_mode_manager.has_normal_modes and viewer.current_frame == viewer._normal_mode_manager.normal_mode_frame_index:
+        viewer.message_service.log_info("Normal modes available for this frame. Press 'v' to view.")
+    
     viewer.run()
 
 if __name__ == "__main__":
