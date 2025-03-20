@@ -68,7 +68,6 @@ class Molecule:
         # Dictionary to hold arbitrary numeric metadata like coord, time, etc.
         self.metadata = {}            # type: Dict[str, float]
 
-
     @classmethod
     def from_atoms(cls, atoms: List[Tuple[str, float, float, float]], title: str = "") -> "Molecule":
         """
@@ -83,7 +82,6 @@ class Molecule:
         n = len(mol.atoms)
         mol.bond_matrix = np.zeros((n, n), dtype=float)
         return mol
-
 
     def read_xyz_data(self,
                       data: Optional[Union[str, List[str]]] = None,
@@ -183,7 +181,6 @@ class Molecule:
         if xyz_comment is not None:
             self.XYZ_Comment = xyz_comment
         else:
-            # If there's a second line from the file, store it here
             self.XYZ_Comment = potential_comment_line if potential_comment_line else None
 
         # Parse or store Energy
@@ -259,7 +256,6 @@ class Molecule:
         # Store everything in self.metadata
         self.metadata.update(discovered_metadata)
 
-
     @classmethod
     def from_xyz_data(cls,
                       data: Optional[Union[str, List[str]]] = None,
@@ -298,21 +294,103 @@ class Molecule:
         """
         Computes the pairwise Euclidean distance matrix between atoms using vectorized operations.
 
-        If the coordinate array is defined as $C$ with shape (n, 3), the distance between any two atoms
+        If the coordinate array is defined as C with shape (n, 3), the distance between any two atoms
         is given by:
 
-        $$
-        d_{ij} = \sqrt{\sum_{k=1}^{3} (C_{ik} - C_{jk})^2}
-        $$
+        d_{ij} = sqrt( sum_{k=1}^{3} (C_{ik} - C_{jk})^2 )
 
         Returns:
             A numpy ndarray of shape (n, n) with distances.
         """
         coords = np.array([[atom.x, atom.y, atom.z] for atom in self.atoms])
-        # Broadcasting to get differences: (n,1,3) - (1,n,3)
         diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
         dist_matrix = np.sqrt(np.sum(diff**2, axis=-1))
         return dist_matrix
+
+    # ------------------------------------------------------------------------
+    # NEW: Return the distance matrix as "Total Connections" representation
+    # ------------------------------------------------------------------------
+    def to_total_connections(self) -> np.ndarray:
+        """
+        Returns the NxN matrix of all interatomic distances (the 'total connections'),
+        which can be viewed as a fully redundant coordinate representation.
+        """
+        return self.compute_distance_matrix()
+
+    # ------------------------------------------------------------------------
+    # NEW: Class method to build a Molecule from a distance matrix
+    # ------------------------------------------------------------------------
+    @classmethod
+    def from_total_connections(cls,
+                               dist_matrix: np.ndarray,
+                               symbols: List[str],
+                               title: str = "From TC",
+                               allow_inconsistent: bool = False) -> "Molecule":
+        """
+        Creates a Molecule by embedding the given NxN pairwise distance matrix dist_matrix
+        into 3D using classical multidimensional scaling (a.k.a. distance geometry).
+
+        Args:
+            dist_matrix (np.ndarray):
+                NxN array of pairwise distances.
+            symbols (List[str]):
+                List of length N with atomic symbols (e.g. ["C", "H", "H", "H"]).
+            title (str):
+                Title or label for the resulting molecule.
+            allow_inconsistent (bool):
+                If True, will proceed with an approximate 3D embedding even if the distances
+                are not perfectly consistent with a Euclidean 3D geometry (negative eigenvalues, etc.).
+                If False, will raise an error if the distance matrix is inconsistent with 3D.
+
+        Returns:
+            A new Molecule instance with the embedded coordinates.
+
+        Raises:
+            ValueError if dist_matrix is not NxN or if distances are inconsistent with 3D embedding
+            (unless allow_inconsistent=True).
+        """
+        N = dist_matrix.shape[0]
+        if dist_matrix.shape[1] != N:
+            raise ValueError("dist_matrix must be square (NxN).")
+
+        if len(symbols) != N:
+            raise ValueError(f"symbols must have length {N}, but got {len(symbols)}.")
+
+        # 1. Square the distances
+        D2 = dist_matrix ** 2
+
+        # 2. Double-center to form Gram matrix B
+        J = np.eye(N) - np.ones((N, N)) / N
+        B = -0.5 * (J @ D2 @ J)
+
+        # 3. Eigen-decomposition
+        eigvals, eigvecs = np.linalg.eigh(B)
+        # Sort eigenvalues in descending order
+        idx = np.argsort(eigvals)[::-1]
+        eigvals = eigvals[idx]
+        eigvecs = eigvecs[:, idx]
+
+        # If we require consistent 3D embedding, check the 3rd eigenvalue
+        if not allow_inconsistent:
+            if eigvals[2] <= 0:
+                raise ValueError("Distance matrix not embeddable in 3D (3rd eigenvalue <= 0).")
+
+        # 4. Build 3D coords from top 3 eigenvalues/eigenvectors
+        #    If allow_inconsistent, we clamp negative eigenvalues to zero
+        top3 = np.maximum(eigvals[:3], 0.0)
+        L = np.diag(np.sqrt(top3))
+        V = eigvecs[:, :3]
+        coords_3d = V @ L  # shape (N, 3)
+
+        # 5. Build a new Molecule and populate coordinates.
+        atom_data = []
+        for i in range(N):
+            symbol = symbols[i]
+            x, y, z = coords_3d[i]
+            atom_data.append((symbol, x, y, z))
+
+        new_mol = cls.from_atoms(atom_data, title=title)
+        return new_mol
 
     def detect_bonds(self, tolerance: float = 0.3):
         """
@@ -323,15 +401,12 @@ class Molecule:
             tolerance: Additional margin (in Å) on top of covalent radius sums.
         """
         n = len(self.atoms)
-        # Compute the full pairwise distance matrix
         dist_matrix = self.compute_distance_matrix()
 
         # Create an array of covalent radii for each atom (assuming single bond order)
         radii = np.array([Elements.covalent_radius(atom.symbol, order="single") for atom in self.atoms])
-        # Build a threshold matrix: each element (i,j) is radii[i] + radii[j] + tolerance
         threshold_matrix = radii[:, None] + radii[None, :] + tolerance
 
-        # A bond is present if the distance is non-zero and less than or equal to the threshold
         self.bond_matrix = ((dist_matrix <= threshold_matrix) & (dist_matrix > 0)).astype(float)
 
     def find_fragments(self):
@@ -359,17 +434,12 @@ class Molecule:
                             if self.bond_matrix[current, neigh] > 0.0 and neigh not in visited:
                                 stack.append(neigh)
 
-                # store the connected fragment
                 self.fragments[frag_id] = connected
                 frag_id += 1
 
     def distance(self, i: int, j: int) -> float:
-        r"""
+        """
         Returns the Euclidean distance between atoms i and j (in Å).
-
-        $$
-        d_{ij} = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2 + (z_i - z_j)^2}
-        $$
         """
         ax, ay, az = self.atoms[i].x, self.atoms[i].y, self.atoms[i].z
         bx, by, bz = self.atoms[j].x, self.atoms[j].y, self.atoms[j].z
@@ -379,13 +449,6 @@ class Molecule:
         """
         Returns the angle at atom j formed by (i - j - k).
         If degrees=False, return radians.
-
-        $$
-        \theta = \cos^{-1} \Biggl(
-            \frac{(\mathbf{r}_i - \mathbf{r}_j) \cdot (\mathbf{r}_k - \mathbf{r}_j)}
-                 {\|\mathbf{r}_i - \mathbf{r}_j\| \, \|\mathbf{r}_k - \mathbf{r}_j\|}
-        \Biggr)
-        $$
         """
         r_i = np.array([self.atoms[i].x, self.atoms[i].y, self.atoms[i].z])
         r_j = np.array([self.atoms[j].x, self.atoms[j].y, self.atoms[j].z])
@@ -399,20 +462,16 @@ class Molecule:
         mag_jk = np.linalg.norm(v_jk)
 
         cos_theta = dot_val / (mag_ji * mag_jk)
-
         # numerical safety
         cos_theta = max(min(cos_theta, 1.0), -1.0)
-
         theta_radians = np.arccos(cos_theta)
+
         return np.degrees(theta_radians) if degrees else theta_radians
 
     def dihedral(self, i: int, j: int, k: int, l: int, degrees: bool = True) -> float:
         """
         Returns the dihedral angle formed by atoms (i - j - k - l).
         If degrees=False, returns radians.
-
-        A standard approach uses cross products to find normal vectors
-        and the sign of the torsion from the 'atan2' of those vectors.
         """
         r_i = np.array([self.atoms[i].x, self.atoms[i].y, self.atoms[i].z])
         r_j = np.array([self.atoms[j].x, self.atoms[j].y, self.atoms[j].z])
@@ -423,19 +482,15 @@ class Molecule:
         b2 = r_k - r_j
         b3 = r_l - r_k
 
-        # normal vectors
         n1 = np.cross(b1, b2)
         n2 = np.cross(b2, b3)
 
-        # handle degenerate vectors (avoid /0)
         if np.linalg.norm(n1) == 0 or np.linalg.norm(n2) == 0:
-            return 0.0  # or raise an exception
+            return 0.0
 
-        # normalize
         n1 /= np.linalg.norm(n1)
         n2 /= np.linalg.norm(n2)
 
-        # cross product to get sign
         m1 = np.cross(n1, b2 / np.linalg.norm(b2))
 
         x = np.dot(n1, n2)
@@ -446,69 +501,30 @@ class Molecule:
 
     def to_standard_orientation(self, use_atomic_numbers: bool = True) -> None:
         """
-        Converts the molecule's atomic coordinates to a standard orientation.
-
-        The procedure is as follows:
-
-        1. **Centering**
-        2. **Inertia Tensor Construction**
-        3. **Diagonalization**
-        4. **Rotation Matrix Construction**
-        5. **Coordinate Transformation**
+        Converts the molecule's atomic coordinates to a standard orientation via
+        a moment of inertia alignment procedure.
         """
         coords = np.array([[atom.x, atom.y, atom.z] for atom in self.atoms])
 
-        # Compute weights based on atomic numbers or masses.
         if use_atomic_numbers:
             weights = np.array([Elements.atomic_number(atom.symbol) for atom in self.atoms])
         else:
             weights = np.array([Elements.mass(atom.symbol) for atom in self.atoms])
 
-        # Step 1: Compute center and centered coordinates.
         coords_centered, T = self._compute_center(coords, weights)
-
-        # Step 2: Construct the inertia tensor.
         I = self._compute_inertia_tensor(coords_centered, weights)
-
-        # Step 3: Diagonalize the inertia tensor.
         eigenvalues, eigenvectors = self._diagonalize_inertia_tensor(I)
-
-        # Step 4: Build the rotation matrix from eigenvectors.
         R = self._build_rotation_matrix(eigenvalues, eigenvectors)
-
-        # Step 5: Rotate the centered coordinates.
         coords_std = self._apply_transformation(coords_centered, R)
-
-        # Update the atom coordinates.
         self._update_atom_coordinates(coords_std)
 
     def _compute_center(self, coords: np.ndarray, weights: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Computes the center of mass (or nuclear charge) and returns the centered coordinates.
-
-        Parameters:
-            coords: Array of atomic coordinates.
-            weights: Array of weights (atomic numbers or masses) for each atom.
-
-        Returns:
-            A tuple (coords_centered, T) where T is the computed center.
-        """
         total_weight = np.sum(weights)
         T = np.sum(weights[:, None] * coords, axis=0) / total_weight
         coords_centered = coords - T
         return coords_centered, T
 
     def _compute_inertia_tensor(self, coords_centered: np.ndarray, weights: np.ndarray) -> np.ndarray:
-        """
-        Constructs the inertia tensor from centered coordinates and weights.
-
-        Parameters:
-            coords_centered: Centered atomic coordinates.
-            weights: Array of weights for each atom.
-
-        Returns:
-            A 3x3 inertia tensor.
-        """
         I = np.zeros((3, 3))
         for i, (x, y, z) in enumerate(coords_centered):
             w = weights[i]
@@ -518,61 +534,34 @@ class Molecule:
             I[0, 1] -= w * x * y
             I[0, 2] -= w * x * z
             I[1, 2] -= w * y * z
-        # Enforce symmetry
         I[1, 0] = I[0, 1]
         I[2, 0] = I[0, 2]
         I[2, 1] = I[1, 2]
         return I
 
     def _diagonalize_inertia_tensor(self, I: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Diagonalizes the inertia tensor.
-
-        Returns:
-            (eigenvalues, eigenvectors), sorted in ascending order of eigenvalues.
-        """
         eigenvalues, eigenvectors = np.linalg.eigh(I)
         return eigenvalues, eigenvectors
 
     def _build_rotation_matrix(self, eigenvalues: np.ndarray, eigenvectors: np.ndarray) -> np.ndarray:
-        """
-        Builds the rotation matrix from the eigenvectors, adopting the
-        convention that the new x-axis = largest eigenvalue, y-axis = middle, z-axis = smallest.
-        Ensures a right-handed system.
-        """
-        # Sort indices: idx[0] smallest, idx[2] largest
         idx = np.argsort(eigenvalues)
         v_small = eigenvectors[:, idx[0]]
         v_mid   = eigenvectors[:, idx[1]]
         v_large = eigenvectors[:, idx[2]]
 
-        # Build rotation matrix (columns: new x, y, z)
         R = np.column_stack((v_large, v_mid, v_small))
-        # Ensure right-handed coordinate system
         if np.linalg.det(R) < 0:
             R[:, 0] *= -1
         return R
 
     def _apply_transformation(self, coords: np.ndarray, R: np.ndarray) -> np.ndarray:
-        """
-        Applies the rotation (or transformation) matrix to the coordinates.
-        """
         return np.dot(coords, R)
 
     def _update_atom_coordinates(self, coords_std: np.ndarray) -> None:
-        """
-        Updates the molecule's atoms with the new coordinates.
-        Swaps axes to match Gaussian's standard orientation convention.
-        """
         for i, atom in enumerate(self.atoms):
-            # Swap axes: assign atom.z, atom.y, atom.x from coords_std[i]
             atom.z, atom.y, atom.x = coords_std[i]
 
     def summary(self) -> str:
-        """
-        Returns a human-readable summary of the molecule:
-        number of atoms, fragments, etc.
-        """
         lines = []
         lines.append(f"Title: {self.title}")
         lines.append(f"Number of atoms: {len(self.atoms)}")
@@ -588,115 +577,71 @@ class Molecule:
         """
         Returns a well-formed XYZ format for the molecule as a string.
 
-        The output format is as follows:
-
+        Format:
             <number of atoms>
             <title>
             <atom symbol> <x> <y> <z>
-
-        Each atom line is formatted with the atomic symbol left-aligned in a field of 5 characters,
-        and each coordinate is printed in a field of 17 characters with 12 decimal places.
         """
         lines = []
-        # First line: the number of atoms.
         lines.append(f"{len(self.atoms)}")
-        # Second line: use the molecule's title if provided
         comment = self.title
         lines.append(comment)
-        # Format each atom line.
         for atom in self.atoms:
             lines.append(f"{atom.symbol:<5}{atom.x:17.12f}{atom.y:17.12f}{atom.z:17.12f}")
         return "\n".join(lines)
 
     @staticmethod
     def _parse_energy(comment_line: str) -> Optional[float]:
-        """
-        Attempt to parse a floating-point energy from the given comment line using a
-        tiered approach:
-
-        1) Look for a labeled pattern like "Energy=...", "E=...", ignoring case.
-        2) If not found, see if there's exactly one float in the entire line.
-        3) Otherwise, return None.
-        """
         if not comment_line.strip():
             return None
-
-        # Step 1: labeled pattern (case-insensitive)
         labeled_pattern = r"(?i)(?:energy|e)\s*[:=]?\s*([-+]?\d+(\.\d+)?([eE][+-]?\d+)?)"
         match = re.search(labeled_pattern, comment_line)
         if match:
             return float(match.group(1))
 
-        # Step 2: if no labeled pattern, see if there's exactly one float
         all_floats = re.findall(
             r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?",
             comment_line
         )
         if len(all_floats) == 1:
             return float(all_floats[0])
-
         return None
 
     @staticmethod
     def _looks_like_just_energy(comment_line: str) -> bool:
-        """
-        Heuristic check: if the line yields one parseable float or a labeled 'energy',
-        and there's minimal extra text, treat it as "just an energy."
-        """
         if not comment_line.strip():
             return True
-
-        # If we found an energy using the parse method...
         possible_energy = Molecule._parse_energy(comment_line)
         if possible_energy is None:
             return False
-
-        # Check how many floats are in the line
         all_floats = re.findall(
             r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?",
             comment_line
         )
-
-        # If there's exactly 1 float, and the rest is basically "energy/E" text,
-        # treat it as just energy
         if len(all_floats) == 1:
             without_float = re.sub(
                 r"[-+]?\d+\.\d+(?:[eE][+-]?\d+)?|[-+]?\d+(?:[eE][+-]?\d+)?",
                 "",
                 comment_line
             )
-            if len(without_float.strip()) < 15:  # arbitrary threshold
+            if len(without_float.strip()) < 15:
                 return True
-
         return False
 
-    # ---------------------------------------------------------------------
-    # NEW METHOD: parse labeled numeric metadata (excluding energy labels).
-    # ---------------------------------------------------------------------
     @staticmethod
     def _parse_metadata(comment_line: str) -> Dict[str, float]:
         """
         Parses labeled numeric metadata fields from the comment line.
         For example, "coord= 25.38", "time=10.5", etc.
-
-        Returns a dictionary {<field>: <float_value>}.
-
-        Note: We do NOT parse 'energy' or 'e' here, to avoid conflicting
-              with the special single-float energy logic.
         """
         results = {}
         if not comment_line.strip():
             return results
 
-        # Known label variants for reaction coordinate or time, etc.
         known_labels = {
             "coord": ["coord", "coordinate"],
             "time": ["t", "time"],
         }
-        # You can expand 'known_labels' as needed, e.g. add "step", "temp", etc.
-
-        # Build one combined pattern: label + '=' + float
-        # We'll do something like: (?i)\b(coord|coordinate|t|time)\s*[:=]\s*([float])
         label_group = "|".join(
             label for variants in known_labels.values() for label in variants
         )
@@ -706,9 +651,8 @@ class Molecule:
         )
 
         for match in re.finditer(pattern, comment_line):
-            raw_label = match.group(1).lower()  # e.g. "coord", "coordinate", "t", etc.
-            value_str = match.group(2)         # e.g. "25.38"
-            # Map raw_label to our canonical key
+            raw_label = match.group(1).lower()
+            value_str = match.group(2)
             for canonical_field, variants in known_labels.items():
                 if raw_label in variants:
                     results[canonical_field] = float(value_str)
@@ -723,6 +667,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     xyz_file = sys.argv[1]
+
     # Example of direct parsing using the instance method
     mol = Molecule().from_xyz_data(file_name=xyz_file)
 
@@ -765,3 +710,17 @@ if __name__ == "__main__":
     print(f"  file_name:    {mol.file_name}")
     print(f"  frame_number: {mol.frame_number}")
     print(f"  extra metadata dictionary: {mol.metadata}")
+
+    # ----------------------------------------------------------------------
+    # NEW: Demonstration: Convert to TCs, embed back, and dump new XYZ
+    # ----------------------------------------------------------------------
+    print("\n--- Converting to Total Connections, then re-embedding in 3D ---")
+    dist_mat = mol.to_total_connections()
+    symbols = [atom.symbol for atom in mol.atoms]
+
+    # Create a new Molecule from the distance matrix
+    mol_reconstructed = Molecule.from_total_connections(dist_mat, symbols,
+                                                        title="Reconstructed from TCs",
+                                                        allow_inconsistent=False)
+    print("\nReconstructed geometry from TCs:")
+    print(mol_reconstructed.to_xyz())
