@@ -860,7 +860,7 @@ class MoleculeViewer(X11Window):
         super().__init__(
             width=width,
             height=height,
-            title="ORTEP Style Molecule (Refactored)",
+            title="quickORTEP",
             canvas_class=canvas_class,
             background_color=background_color
         )
