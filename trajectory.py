@@ -482,6 +482,30 @@ class Trajectory:
             # Store the energy (if parsed) so we can print an energy table without reprocessing later.
             self._frame_energies[frame_index] = mol.Energy
         return self._molecule_cache[frame_index]
+        
+    def update_frame(self, frame_index, molecule):
+        """
+        Update a specific frame with a modified molecule.
+        
+        Parameters:
+            frame_index (int): Index of the frame to update
+            molecule: The molecule object with updated data
+            
+        Raises:
+            ValueError: If frame_index is out of range
+        """
+        if frame_index < 0 or frame_index >= len(self._raw_frames):
+            raise ValueError(f"Invalid frame index: {frame_index}")
+            
+        # Update the molecule cache
+        self._molecule_cache[frame_index] = molecule
+        
+        # Update the raw frame data
+        xyz_data = molecule.to_xyz().splitlines()
+        self._raw_frames[frame_index] = xyz_data
+        
+        # Update energy if available
+        self._frame_energies[frame_index] = molecule.Energy
 
     def _detect_hartree_units(self):
         """

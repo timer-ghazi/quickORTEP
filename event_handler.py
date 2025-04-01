@@ -97,6 +97,8 @@ class _EventHandler:
             'd': self._toggle_hydrogens,
             'g': self._toggle_grid,
             'a': self._toggle_axes,  # Add axes toggle command
+            't': self._standard_orientation, # Standard orientation (current frame)
+            'T': self._standard_orientation_all, # Standard orientation (all frames)
             
             # Bond operations
             'p': self._toggle_graph_mode,
@@ -311,7 +313,17 @@ class _EventHandler:
 
     # Command implementation methods
 
-    def _reload_file(self):  # <<< NEW
+    def _standard_orientation(self):
+        """Convert the current frame to standard orientation."""
+        self.viewer.standard_orientation()
+        self.viewer.redraw()
+        
+    def _standard_orientation_all(self):
+        """Convert all frames in the trajectory to standard orientation."""
+        self.viewer.standard_orientation_all()
+        self.viewer.redraw()
+    
+    def _reload_file(self):
         """Reload the current file from disk."""
         self.viewer.reload_file()
         self.viewer.redraw()

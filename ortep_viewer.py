@@ -1295,6 +1295,60 @@ class MoleculeViewer(X11Window):
         self._graph_manager.export_graph_data()
 
 
+    def standard_orientation(self):
+        """
+        Convert the current molecule to standard orientation using 
+        the to_standard_orientation method from molecule.py
+        """
+        if not self.trajectory:
+            self.message_service.log_info("No molecule data available to convert")
+            return
+            
+        # Get the current molecule from the trajectory
+        mol = self.trajectory.get_frame(self.current_frame)
+        
+        # Convert to standard orientation
+        mol.to_standard_orientation()
+        
+        # Update the trajectory frame with the modified molecule
+        self.trajectory.update_frame(self.current_frame, mol)
+        
+        # Update the displayed molecule
+        self.set_frame(self.current_frame)
+        
+        self.message_service.log_info("Converted frame to standard orientation")
+        
+    def standard_orientation_all(self):
+        """
+        Convert all frames in the trajectory to standard orientation
+        """
+        if not self.trajectory:
+            self.message_service.log_info("No molecule data available to convert")
+            return
+            
+        # Store current frame to restore it later
+        current_frame = self.current_frame
+        total_frames = self.total_frames
+        
+        # Show a processing message
+        self.message_service.log_info(f"Converting all {total_frames} frames to standard orientation...")
+        
+        # Process all frames
+        for frame_idx in range(total_frames):
+            # Get the molecule for this frame
+            mol = self.trajectory.get_frame(frame_idx)
+            
+            # Convert to standard orientation
+            mol.to_standard_orientation()
+            
+            # Update the trajectory frame
+            self.trajectory.update_frame(frame_idx, mol)
+        
+        # Restore original frame
+        self.set_frame(current_frame)
+        
+        self.message_service.log_info(f"Converted all {total_frames} frames to standard orientation")
+        
     def reload_file(self):  
         """
         Reload the currently loaded file from disk if possible.
