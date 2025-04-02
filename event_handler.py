@@ -77,12 +77,20 @@ class _EventHandler:
             'k': lambda: self._rotate_view('x', -1),
             'u': lambda: self._rotate_view('z', -1),
             'o': lambda: self._rotate_view('z', 1),
+            'Left': lambda: self._rotate_view('y', -1),     # Arrow key equivalent to 'h'
+            'Right': lambda: self._rotate_view('y', 1),     # Arrow key equivalent to 'l'
+            'Down': lambda: self._rotate_view('x', 1),      # Arrow key equivalent to 'j'
+            'Up': lambda: self._rotate_view('x', -1),       # Arrow key equivalent to 'k'
             
             # View panning
             'H': lambda: self._pan_view('x', -1),
             'L': lambda: self._pan_view('x', 1),
             'K': lambda: self._pan_view('y', -1),
             'J': lambda: self._pan_view('y', 1),
+            'Shift_L-Left': lambda: self._pan_view('x', -1),    # Shift+Arrow key equivalent to 'H'
+            'Shift_L-Right': lambda: self._pan_view('x', 1),    # Shift+Arrow key equivalent to 'L'
+            'Shift_L-Up': lambda: self._pan_view('y', -1),      # Shift+Arrow key equivalent to 'K'
+            'Shift_L-Down': lambda: self._pan_view('y', 1),     # Shift+Arrow key equivalent to 'J'
             
             # Zoom
             'n': self._zoom_in,
@@ -161,6 +169,15 @@ class _EventHandler:
             if self.viewer.show_help and keychar != '?':
                 self._toggle_help()   # or set show_help = False, then redraw
                 return
+                
+            # Handle special keys and modifier combinations
+            if keychar in ('Left', 'Right', 'Up', 'Down') and shift_pressed:
+                # Handle Shift+Arrow key combinations
+                shifted_key = f"Shift_L-{keychar}"
+                if shifted_key in self.key_commands:
+                    self.key_commands[shifted_key]()
+                    self.viewer.redraw()
+                    return
             
             # Execute the command if it exists
             if keychar in self.key_commands:
