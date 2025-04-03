@@ -12,6 +12,8 @@ import time
 from functools import lru_cache
 import numpy as np
 from Xlib import XK, X
+from Xlib.XK import XK_Left, XK_Right, XK_Up, XK_Down
+
 from bond_manager import cycle_existing_bond, toggle_bond
 from config import VIEWER_INTERACTION, ENERGY_UNITS, DEFAULT_ENERGY_UNIT
 from x11view.svg_canvas import SVGCanvas
@@ -143,36 +145,78 @@ class _EventHandler:
     def handle_key(self, evt):
         """
         Handle keyboard events and dispatch to appropriate handler methods.
-        
+        REVISED: Handles arrow keys by checking base keysym first, then shift state.
+    
         Parameters:
             evt: The X11 key event to process.
         """
         try:
-            keysym = self.viewer.display.keycode_to_keysym(evt.detail, evt.state)
-            keychar = XK.keysym_to_string(keysym)
-            if keychar is None:
-                return
-
-            # Check for shift-modified commands (Uppercase chars)
+            # Get the base keysym WITHOUT considering modifiers first
+            # This tells us which physical key was pressed (like 'Left Arrow')
+            base_keysym = self.viewer.display.keycode_to_keysym(evt.detail, 0)
+    
+            # Now check the actual state for modifiers like Shift
             shift_pressed = bool(evt.state & X.ShiftMask)
-
-            # If help is currently on, and user pressed ANY key,
-            # we hide the help and return (so that it doesn't also trigger other commands).
+    
             if self.viewer.show_help:
-                self._toggle_help()   # or set show_help = False, then redraw
+                self._toggle_help()
                 return
-                
-            
-            # Execute the command if it exists
-            if keychar in self.key_commands:
-                self.key_commands[keychar]()
+    
+            action_taken = False
+    
+            # --- Arrow Key Logic (Check base_keysym first) ---
+            if base_keysym == XK_Left:
+                if shift_pressed:
+                    self._pan_view('x', -1) # Pan left
+                else:
+                    self._rotate_view('y', -1) # Rotate left
+                action_taken = True
+            elif base_keysym == XK_Right:
+                if shift_pressed:
+                    self._pan_view('x', 1)  # Pan right
+                else:
+                    self._rotate_view('y', 1)  # Rotate right
+                action_taken = True
+            elif base_keysym == XK_Up:
+                if shift_pressed:
+                    self._pan_view('y', -1) # Pan up
+                else:
+                    self._rotate_view('x', -1) # Rotate up
+                action_taken = True
+            elif base_keysym == XK_Down:
+                if shift_pressed:
+                    self._pan_view('y', 1)  # Pan down
+                else:
+                    self._rotate_view('x', 1)  # Rotate down
+                action_taken = True
+    
+            # --- Existing Key Command Logic ---
+            # Only check other keys if no arrow key action was taken
+            if not action_taken:
+                # For other keys, we might still need the keysym derived *with* state
+                # to handle shifted symbols or letters correctly.
+                keysym_with_state = self.viewer.display.keycode_to_keysym(evt.detail, evt.state)
+                keychar = XK.keysym_to_string(keysym_with_state) # Use string from stateful keysym
+    
+                if keychar is not None:
+                     # The key_commands dictionary expects the final character ('h', 'H', '?', etc.)
+                     key_to_check = keychar
+                     if key_to_check in self.key_commands:
+                        self.key_commands[key_to_check]()
+                        action_taken = True
+    
+    
+            # Redraw if any action was taken
+            if action_taken:
                 self.viewer.redraw()
-
+    
         except Exception as e:
-            self.viewer.message_service.log_error(f"Error handling key event: {str(e)}")
-            # Optional debug logging
-            import traceback
-            self.viewer.message_service.log_debug(traceback.format_exc())
+            print(f"ERROR handling key event: {str(e)}")
+            # import traceback
+            # traceback.print_exc()
+            # self.viewer.message_service.log_error(f"Error handling key event: {str(e)}")
+            # self.viewer.message_service.log_debug(traceback.format_exc())        
+
 
     def handle_button_press(self, evt):
         """
