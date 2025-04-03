@@ -304,6 +304,15 @@ ATOM_STYLE = {
         "brightness_factor": 1.5,  # For calculated highlight color
         "use_white_for_dark": True # Use white for dark atoms
     },
+    
+    # 3D shadow settings
+    "shadow": {
+        "enabled": True,        # Turn the effect on/off
+        "offset_x": 2,          # Horizontal shadow offset (positive = right)
+        "offset_y": 3,          # Vertical shadow offset (positive = down)
+        "radius_factor": 1.1,   # Shadow size relative to atom radius
+        "darkness": 40          # Shadow color darkness (0-255, lower = darker)
+    },
 }
 
 # ================================

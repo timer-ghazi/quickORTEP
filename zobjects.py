@@ -29,6 +29,23 @@ class ZAtom(ZObject):
         self.atom = None  # Underlying ORTEP_Atom instance
 
     def draw(self, canvas):
+        # Add shadow for 3D effect (DRAW THIS FIRST)
+        if ATOM_STYLE.get("shadow", {}).get("enabled", True):
+            # Get shadow parameters from config or use defaults
+            shadow_offset_x = ATOM_STYLE.get("shadow", {}).get("offset_x", 2)
+            shadow_offset_y = ATOM_STYLE.get("shadow", {}).get("offset_y", 3)
+            shadow_radius_factor = ATOM_STYLE.get("shadow", {}).get("radius_factor", 1.1)
+            shadow_darkness = ATOM_STYLE.get("shadow", {}).get("darkness", 40)
+            shadow_color = (shadow_darkness, shadow_darkness, shadow_darkness)
+            
+            # Calculate shadow position (slightly offset, typically down-right)
+            shadow_radius = int(self.radius * shadow_radius_factor)
+            shadow_x = self.x2d + shadow_offset_x
+            shadow_y = self.y2d + shadow_offset_y
+            
+            # Draw the shadow
+            canvas.draw_filled_circle(shadow_x, shadow_y, shadow_radius, color=shadow_color)
+            
         # Draw the filled circle.
         canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=self.color)
         # Draw the atom border using the configured border color.
