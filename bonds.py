@@ -73,8 +73,8 @@ class Bond(ABC):
 
         # Use vectorized projection:
         # Rather than using a list comprehension, use the vectorized project_points function
-        proj1 = project_points(p1_segments, view_params)
-        proj2 = project_points(p2_segments, view_params)
+        proj1 = project_points(p1_segments, view_params, as_float=view_params.as_float)
+        proj2 = project_points(p2_segments, view_params, as_float=view_params.as_float)
         X1, Y1 = proj1[:, 0], proj1[:, 1]
         X2, Y2 = proj2[:, 0], proj2[:, 1]
 
