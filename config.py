@@ -295,6 +295,15 @@ ATOM_STYLE = {
     
     # Fallback color for unknown atoms
     "fallback_color": (200, 200, 200),
+    
+    # 3D highlight settings
+    "highlight": {
+        "enabled": True,           # Turn the effect on/off
+        "size_ratio": 0.3,         # Size relative to atom radius
+        "offset_ratio": 0.4,       # Offset from center (towards upper-left)
+        "brightness_factor": 1.5,  # For calculated highlight color
+        "use_white_for_dark": True # Use white for dark atoms
+    },
 }
 
 # ================================

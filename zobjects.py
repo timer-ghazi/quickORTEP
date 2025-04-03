@@ -49,6 +49,36 @@ class ZAtom(ZObject):
             angle_start_deg=270, angle_end_deg=450,
             color=ATOM_STYLE["border_color"], thickness=meridian_thickness
         )
+        
+        # Add 3D highlight effect
+        if ATOM_STYLE.get("highlight", {}).get("enabled", True):
+            # Get highlight parameters from config or use defaults
+            size_ratio = ATOM_STYLE.get("highlight", {}).get("size_ratio", 0.3)
+            offset_ratio = ATOM_STYLE.get("highlight", {}).get("offset_ratio", 0.4)
+            brightness_factor = ATOM_STYLE.get("highlight", {}).get("brightness_factor", 1.5)
+            use_white_for_dark = ATOM_STYLE.get("highlight", {}).get("use_white_for_dark", True)
+            
+            # Calculate highlight position (upper-left quadrant by default)
+            highlight_radius = max(2, int(self.radius * size_ratio))
+            highlight_offset_x = -int(self.radius * offset_ratio)
+            highlight_offset_y = -int(self.radius * offset_ratio)
+            highlight_x = self.x2d + highlight_offset_x
+            highlight_y = self.y2d + highlight_offset_y
+            
+            # Calculate highlight color based on atom color
+            base_r, base_g, base_b = self.color
+            if use_white_for_dark and (base_r + base_g + base_b) / 3 < 100:
+                # For dark atoms, use white highlight
+                highlight_color = (255, 255, 255)
+            else:
+                # For lighter atoms, use a brightened version of atom color
+                highlight_r = min(255, int(base_r * brightness_factor))
+                highlight_g = min(255, int(base_g * brightness_factor))
+                highlight_b = min(255, int(base_b * brightness_factor))
+                highlight_color = (highlight_r, highlight_g, highlight_b)
+            
+            # Draw the highlight
+            canvas.draw_filled_circle(highlight_x, highlight_y, highlight_radius, color=highlight_color)
 
         # Draw highlight if the atom is selected.
         if self.selected:
