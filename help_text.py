@@ -20,4 +20,6 @@ HELP_TEXT = [
     " Left drag => rotate         Middle drag => rotate Z",
     " Right drag => pan           Mouse wheel => zoom in/out",
     " Shift+Left => multi-select  Shift+Double-click => reset view                      "
+    "",
+    "===================================================================================",
 ]
