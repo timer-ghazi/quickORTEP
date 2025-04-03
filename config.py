@@ -341,6 +341,11 @@ COVALENT_BOND = {
     
     # Minimum thickness in pixels
     "min_thickness_px": 1,
+    
+    # Tapering configuration
+    "enable_taper": True,         # Turn tapering on/off
+    "min_taper_factor": 0.5,      # Minimum thickness as fraction of normal (thinnest part)
+    "taper_range": 0.5,           # Difference between thickest and thinnest parts
 }
 
 NCI_BOND = {
@@ -358,6 +363,11 @@ NCI_BOND = {
     
     # Minimum thickness in pixels
     "min_thickness_px": 1,
+    
+    # Tapering configuration
+    "enable_taper": True,         # Turn tapering on/off
+    "min_taper_factor": 0.5,      # Minimum thickness as fraction of normal (thinnest part)
+    "taper_range": 0.5,           # Difference between thickest and thinnest parts
 }
 
 TS_BOND = {
@@ -372,6 +382,11 @@ TS_BOND = {
     
     # Minimum thickness in pixels
     "min_thickness_px": 1,
+    
+    # Tapering configuration
+    "enable_taper": True,         # Turn tapering on/off
+    "min_taper_factor": 0.5,      # Minimum thickness as fraction of normal (thinnest part)
+    "taper_range": 0.5,           # Difference between thickest and thinnest parts
 }
 
 DISTANCE_BOND = {
@@ -386,6 +401,11 @@ DISTANCE_BOND = {
     
     # Minimum thickness in pixels
     "min_thickness_px": 1,
+    
+    # Tapering configuration
+    "enable_taper": True,         # Turn tapering on/off
+    "min_taper_factor": 0.5,      # Minimum thickness as fraction of normal (thinnest part)
+    "taper_range": 0.5,           # Difference between thickest and thinnest parts
 }
 
 # ================================

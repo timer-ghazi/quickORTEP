@@ -55,6 +55,14 @@ class Bond(ABC):
         if dist < 1e-6 or (r_i + r_j >= dist):
             return []
 
+        # Determine which atom is closer to the viewer (smaller Z is closer in OpenGL-like coords)
+        front_end = 0 if z1 < z2 else 1
+        
+        # Get tapering configuration from bond_config or use defaults
+        enable_taper = bond_config.get("enable_taper", True)
+        min_taper = bond_config.get("min_taper_factor", 0.7)  # Thinnest part is 70% of normal thickness
+        taper_range = bond_config.get("taper_range", 0.3)     # Difference between thickest and thinnest
+
         t_start, t_end = self.compute_visible_region(r_i, r_j, dist)
         visible_length = (t_end - t_start) * dist
 
@@ -86,19 +94,39 @@ class Bond(ABC):
             z_mid = z_mid[indices]
             N = len(indices)
 
-        # Calculate the thickness in pixels.
+        # Calculate the base thickness in pixels.
         thickness_factor = bond_config.get("thickness_factor", 1.0)
-        bond_thickness_px = max(1, int(bond_config["thickness"] * thickness_factor * view_params.scale))
+        base_thickness = max(bond_config.get("min_thickness_px", 1), 
+                           int(bond_config["thickness"] * thickness_factor * view_params.scale))
 
         segments = []
         for i in range(N):
+            # Calculate segment position (0.0-1.0) along the bond
+            segment_pos = (i + 0.5) / N if N > 1 else 0.5
+            
+            # Apply tapering based on which end is closer to viewer
+            if enable_taper:
+                if front_end == 0:
+                    # First atom is closer - taper from start to end
+                    # Should be thicker at closer end (start), thinner at farther end (end)
+                    taper_factor = 1.0 - taper_range * segment_pos
+                else:
+                    # Second atom is closer - taper from end to start
+                    # Should be thicker at closer end (end), thinner at farther end (start)
+                    taper_factor = 1.0 - taper_range * (1.0 - segment_pos)
+            else:
+                taper_factor = 1.0
+            
+            # Apply taper factor to thickness
+            segment_thickness = max(1, int(base_thickness * taper_factor))
+            
             seg_obj = ZSegment(
                 x1=X1[i],
                 y1=Y1[i],
                 x2=X2[i],
                 y2=Y2[i],
                 z_value=z_mid[i],
-                thickness=bond_thickness_px,
+                thickness=segment_thickness,
                 color=bond_config["color"]
             )
             seg_obj.bond = self  # Attach underlying bond data.
