@@ -67,7 +67,14 @@ class SVGCanvas:
         """
         Draw a line with floating point coordinates.
         The line uses 'round' linecaps and joins to avoid visual gaps.
+        Coordinates are formatted with consistent precision to avoid zig-zag artifacts.
         """
+        # Format coordinates with consistent precision (3 decimal places)
+        x1_str = f"{float(x1):.3f}"
+        y1_str = f"{float(y1):.3f}"
+        x2_str = f"{float(x2):.3f}"
+        y2_str = f"{float(y2):.3f}"
+        
         col = self.rgb_to_hex(color)
         style = (
             f'stroke="{col}" '
@@ -76,8 +83,24 @@ class SVGCanvas:
             f'stroke-linejoin="round" '
             f'fill="none"'
         )
-        line_elem = f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {style} />'
+        line_elem = f'<line x1="{x1_str}" y1="{y1_str}" x2="{x2_str}" y2="{y2_str}" {style} />'
         self.svg_data.append(line_elem)
+
+#- -     def draw_line(self, x1, y1, x2, y2, thickness=1, color=(0,0,0)):
+#- -         """
+#- -         Draw a line with floating point coordinates.
+#- -         The line uses 'round' linecaps and joins to avoid visual gaps.
+#- -         """
+#- -         col = self.rgb_to_hex(color)
+#- -         style = (
+#- -             f'stroke="{col}" '
+#- -             f'stroke-width="{thickness}" '
+#- -             f'stroke-linecap="round" '
+#- -             f'stroke-linejoin="round" '
+#- -             f'fill="none"'
+#- -         )
+#- -         line_elem = f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" {style} />'
+#- -         self.svg_data.append(line_elem)
 
     def draw_filled_circle(self, cx, cy, radius, color=(0,0,0)):
         """Draw a filled circle at (cx,cy) with the given radius and fill color."""
