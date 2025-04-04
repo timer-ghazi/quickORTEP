@@ -59,23 +59,49 @@ class ZAtom(ZObject):
             
         # Draw the filled circle.
         canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=self.color)
-        # Draw the atom border using the configured border color.
-        canvas.draw_circle_border(self.x2d, self.y2d, self.radius, color=ATOM_STYLE["border_color"], thickness=2)
         
-        # Draw ORTEP arcs.
-        meridian_thickness = ARC_STYLE["meridian_thickness"]
+        # Get the current zoom level for scaled thickness calculations
+        from config import VIEWER_INTERACTION
+        current_zoom = VIEWER_INTERACTION.get("current_zoom", 100.0)
+        
+        # Calculate scaled border thickness based on zoom level
+        border_thickness = max(
+            ATOM_STYLE.get("min_border_thickness_px", 1),
+            int(ATOM_STYLE.get("border_thickness", 0.02) * current_zoom)
+        )
+        
+        # Draw the atom border with scaled thickness
+        canvas.draw_circle_border(
+            self.x2d, self.y2d, 
+            self.radius,
+            color=ATOM_STYLE["border_color"], 
+            thickness=border_thickness
+        )
+        
+        # Calculate scaled meridian arc thickness
+        meridian_thickness = max(
+            ARC_STYLE.get("min_meridian_thickness_px", 1),
+            int(ARC_STYLE.get("meridian_thickness", 0.03) * current_zoom)
+        )
+        
+        # Get arc flattening factor
         flatten = ARC_STYLE["flatten"]
+        
+        # Draw ORTEP arcs with scaled thickness
         canvas.draw_arc(
             self.x2d, self.y2d, 
             self.radius, int(self.radius * flatten),
             angle_start_deg=180, angle_end_deg=360,
-            color=ATOM_STYLE["border_color"], thickness=meridian_thickness
+            color=ATOM_STYLE["border_color"], 
+            thickness=meridian_thickness
         )
+        
         canvas.draw_arc(
             self.x2d, self.y2d, 
             int(self.radius * flatten), self.radius,
             angle_start_deg=270, angle_end_deg=450,
-            color=ATOM_STYLE["border_color"], thickness=meridian_thickness
+            color=ATOM_STYLE["border_color"], 
+            thickness=meridian_thickness
         )
         
         # Add 3D highlight effect

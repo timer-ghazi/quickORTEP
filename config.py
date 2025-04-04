@@ -265,7 +265,7 @@ DEFAULT_ENERGY_UNIT = "kcal_mol"
 GRID_SETTINGS = {
     "major_spacing": 1.0,      # Major grid lines every 1.0 Å
     "minor_divisions": 2,      # 4 divisions = 0.25 Å between minor lines
-    "major_thickness": 1,      # 1 pixel thick
+    "major_thickness": 2,      # 1 pixel thick
     "minor_thickness": 1,      # 1 pixel thick
 }
 
@@ -288,6 +288,12 @@ ATOM_STYLE = {
     
     # Minimum radius in pixels to display an atom.
     "min_radius": 2,
+    
+    # Border thickness in Ångströms (not pixels).
+    "border_thickness": 0.02,
+    
+    # Minimum border thickness in pixels (for very low zoom levels).
+    "min_border_thickness_px": 1,
     
     # Color palette for atoms
     "color_palette": "Rasmol",
@@ -322,8 +328,11 @@ ARC_STYLE = {
     # Factor to flatten arcs to simulate sphere curvature.
     "flatten": 0.4,
     
-    # Thickness for the ORTEP meridian arcs.
-    "meridian_thickness": 2,
+    # Thickness for the ORTEP meridian arcs in Ångströms (not pixels).
+    "meridian_thickness": 0.03,
+    
+    # Minimum thickness in pixels (for very low zoom levels).
+    "min_meridian_thickness_px": 1,
 }
 
 # ================================
