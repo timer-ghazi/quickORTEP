@@ -232,6 +232,8 @@ class _EventHandler:
                     self.viewer.view_params.scale *= VIEWER_INTERACTION["mouse_zoom_factor"]
                 elif evt.detail == 5:
                     self.viewer.view_params.scale /= VIEWER_INTERACTION["mouse_zoom_factor"]
+                # Update the current zoom level in the VIEWER_INTERACTION dictionary
+                VIEWER_INTERACTION["current_zoom"] = self.viewer.view_params.scale
                 self.viewer.redraw()
                 return
 
@@ -412,6 +414,8 @@ class _EventHandler:
     def _zoom_in(self):
         """Zoom in the view."""
         self.viewer.view_params.scale *= VIEWER_INTERACTION["key_zoom_factor"]
+        # Update the current zoom level in the VIEWER_INTERACTION dictionary
+        VIEWER_INTERACTION["current_zoom"] = self.viewer.view_params.scale
         self.viewer.message_service.log_info(
             f"Zoomed in (scale: {self.viewer.view_params.scale:.1f})"
         )
@@ -419,6 +423,8 @@ class _EventHandler:
     def _zoom_out(self):
         """Zoom out the view."""
         self.viewer.view_params.scale /= VIEWER_INTERACTION["key_zoom_factor"]
+        # Update the current zoom level in the VIEWER_INTERACTION dictionary
+        VIEWER_INTERACTION["current_zoom"] = self.viewer.view_params.scale
         self.viewer.message_service.log_info(
             f"Zoomed out (scale: {self.viewer.view_params.scale:.1f})"
         )

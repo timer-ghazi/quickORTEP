@@ -812,6 +812,9 @@ class _ViewManager:
         center_y = (min_y + max_y) / 2.0
         self.viewer.view_params.x_offset = self.viewer.canvas.width / 2 - center_x * self.viewer.view_params.scale
         self.viewer.view_params.y_offset = self.viewer.canvas.height / 2 - center_y * self.viewer.view_params.scale
+        # Update the current zoom level in VIEWER_INTERACTION
+        from config import VIEWER_INTERACTION
+        VIEWER_INTERACTION["current_zoom"] = self.viewer.view_params.scale
         self.viewer.message_service.log_info(f"Molecule fitted to window (scale: {new_scale:.1f})")
         self.viewer.redraw()
 
@@ -823,6 +826,9 @@ class _ViewManager:
         self.viewer.view_params.scale = 100.0
         self.viewer.view_params.x_offset = self.viewer.canvas.width // 2
         self.viewer.view_params.y_offset = self.viewer.canvas.height // 2
+        # Update the current zoom level in VIEWER_INTERACTION
+        from config import VIEWER_INTERACTION
+        VIEWER_INTERACTION["current_zoom"] = self.viewer.view_params.scale
         self.viewer.message_service.log_info("View reset to default")
         self.viewer.redraw()
 
@@ -873,6 +879,8 @@ class MoleculeViewer(X11Window):
             x_offset=width // 2,
             y_offset=height // 2
         )
+        # Initialize the current zoom level in VIEWER_INTERACTION
+        VIEWER_INTERACTION["current_zoom"] = self.view_params.scale
         self.renderer = ORTEP_MoleculeRenderer()
 
         # --- Initialize Component Managers ---

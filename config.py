@@ -497,6 +497,9 @@ VIEWER_INTERACTION = {
     
     # Key to toggle axes visibility
     "axes_toggle_key": "a",
+    
+    # Current zoom level (updated dynamically)
+    "current_zoom": 100.0,
 }
 
 # ================================

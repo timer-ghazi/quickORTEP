@@ -38,10 +38,21 @@ class ZAtom(ZObject):
             shadow_darkness = ATOM_STYLE.get("shadow", {}).get("darkness", 40)
             shadow_color = (shadow_darkness, shadow_darkness, shadow_darkness)
             
+            # Get the current zoom level from VIEWER_INTERACTION if available
+            from config import VIEWER_INTERACTION
+            # Scale offsets based on zoom ratio (100 is the default zoom level)
+            base_zoom = 100.0
+            current_zoom = VIEWER_INTERACTION.get("current_zoom", base_zoom)
+            zoom_ratio = current_zoom / base_zoom
+            
+            # Scale the shadow offset with zoom level (minimum 1 pixel)
+            scaled_offset_x = max(1, int(shadow_offset_x * zoom_ratio))
+            scaled_offset_y = max(1, int(shadow_offset_y * zoom_ratio))
+            
             # Calculate shadow position (slightly offset, typically down-right)
             shadow_radius = int(self.radius * shadow_radius_factor)
-            shadow_x = self.x2d + shadow_offset_x
-            shadow_y = self.y2d + shadow_offset_y
+            shadow_x = self.x2d + scaled_offset_x
+            shadow_y = self.y2d + scaled_offset_y
             
             # Draw the shadow
             canvas.draw_filled_circle(shadow_x, shadow_y, shadow_radius, color=shadow_color)
