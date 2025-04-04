@@ -104,16 +104,31 @@ class Bond(ABC):
             # Calculate segment position (0.0-1.0) along the bond
             segment_pos = (i + 0.5) / N if N > 1 else 0.5
             
+            # Calculate Z-difference and normalize by bond length
+            z_diff = abs(z1 - z2)
+            z_diff_normalized = min(1.0, z_diff / dist)  # Cap at 1.0 for very long Z-differences
+            
+            # Determine which atom is closer to the viewer (unchanged)
+            front_end = 0 if z1 < z2 else 1
+            
+            # Get tapering configuration (unchanged)
+            enable_taper = bond_config.get("enable_taper", True)
+            min_taper = bond_config.get("min_taper_factor", 0.5)
+            max_taper_range = bond_config.get("taper_range", 0.5)
+            
+            # Scale taper_range based on Z-difference - THIS IS THE KEY CHANGE
+            applied_taper_range = max_taper_range * z_diff_normalized
+            
             # Apply tapering based on which end is closer to viewer
             if enable_taper:
                 if front_end == 0:
                     # First atom is closer - taper from start to end
                     # Should be thicker at closer end (start), thinner at farther end (end)
-                    taper_factor = 1.0 - taper_range * segment_pos
+                    taper_factor = 1.0 - applied_taper_range * segment_pos
                 else:
                     # Second atom is closer - taper from end to start
                     # Should be thicker at closer end (end), thinner at farther end (start)
-                    taper_factor = 1.0 - taper_range * (1.0 - segment_pos)
+                    taper_factor = 1.0 - applied_taper_range * (1.0 - segment_pos)
             else:
                 taper_factor = 1.0
             
