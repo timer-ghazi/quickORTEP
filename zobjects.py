@@ -12,6 +12,63 @@ class ZObject:
 
     def draw(self, canvas):
         raise NotImplementedError("Subclasses must implement draw().")
+        
+    def apply_fog(self, color):
+        """
+        Apply depth-based fog effect to a color based on z_value.
+        
+        The fog effect blends the object's color with the background color
+        based on the object's distance from the viewer. Objects further 
+        away will have more fog applied.
+        
+        Parameters:
+            color: Original RGB color tuple (r, g, b)
+            
+        Returns:
+            tuple: Modified RGB color with fog effect applied
+        """
+        from config import ATOM_STYLE, CANVAS_SETTINGS
+        
+        # If fog is not enabled, return the original color
+        if not ATOM_STYLE.get("fog", {}).get("enabled", False):
+            return color
+            
+        # Get fog parameters
+        fog_settings = ATOM_STYLE.get("fog", {})
+        start_distance = fog_settings.get("start_distance", 5.0)
+        end_distance = fog_settings.get("end_distance", 20.0)
+        max_intensity = fog_settings.get("max_intensity", 0.7)
+        exponent = fog_settings.get("exponent", 1.0)
+        
+        # Get background color for blending
+        bg_color = CANVAS_SETTINGS.get("background_color", (0, 0, 0))
+        
+        # Calculate distance (z_value is negative when object is further away)
+        # We use absolute value to measure distance from viewer
+        distance = abs(self.z_value)
+        
+        # Calculate fog factor (0.0 = no fog, 1.0 = full fog)
+        if distance <= start_distance:
+            fog_factor = 0.0
+        elif distance >= end_distance:
+            fog_factor = max_intensity
+        else:
+            # Calculate normalized distance in range [0,1]
+            norm_distance = (distance - start_distance) / (end_distance - start_distance)
+            
+            # Apply exponent for non-linear fog if needed
+            if exponent != 1.0:
+                norm_distance = norm_distance ** exponent
+                
+            # Scale by max intensity
+            fog_factor = norm_distance * max_intensity
+        
+        # Apply fog by blending with background color
+        r = int(color[0] * (1 - fog_factor) + bg_color[0] * fog_factor)
+        g = int(color[1] * (1 - fog_factor) + bg_color[1] * fog_factor)
+        b = int(color[2] * (1 - fog_factor) + bg_color[2] * fog_factor)
+        
+        return (r, g, b)
 
 
 class ZAtom(ZObject):
@@ -38,14 +95,18 @@ class ZAtom(ZObject):
         base_zoom = 100.0
         zoom_ratio = current_zoom / base_zoom
         
-        # Add shadow for 3D effect (DRAW THIS FIRST)
+        # Apply fog to colors
+        shadow_color = (40, 40, 40)  # Default shadow color
         if ATOM_STYLE.get("shadow", {}).get("enabled", True):
+            shadow_darkness = ATOM_STYLE.get("shadow", {}).get("darkness", 40)
+            shadow_color = (shadow_darkness, shadow_darkness, shadow_darkness)
+            # Apply fog to shadow color
+            shadow_color = self.apply_fog(shadow_color)
+            
             # Get shadow parameters from config or use defaults
             shadow_offset_x = ATOM_STYLE.get("shadow", {}).get("offset_x", 2)
             shadow_offset_y = ATOM_STYLE.get("shadow", {}).get("offset_y", 3)
             shadow_radius_factor = ATOM_STYLE.get("shadow", {}).get("radius_factor", 1.1)
-            shadow_darkness = ATOM_STYLE.get("shadow", {}).get("darkness", 40)
-            shadow_color = (shadow_darkness, shadow_darkness, shadow_darkness)
             
             # Scale the shadow offset with zoom level (minimum 1 pixel)
             scaled_offset_x = max(1, int(shadow_offset_x * zoom_ratio))
@@ -59,15 +120,21 @@ class ZAtom(ZObject):
             # Draw the shadow
             canvas.draw_filled_circle(shadow_x, shadow_y, shadow_radius, color=shadow_color)
         
+        # Apply fog to atom color
+        atom_color = self.apply_fog(self.color)
+        
+        # Apply fog to border color
+        border_color = self.apply_fog(ATOM_STYLE["border_color"])
+        
         # Check if enhanced lighting is enabled
         lighting_enabled = ATOM_STYLE.get("lighting", {}).get("enabled", False)
         
         if lighting_enabled and hasattr(canvas, "draw_filled_arc"):
-            # Use advanced lighting model with gradients
+            # Use advanced lighting model with gradients (fog is handled in this method)
             self._draw_with_enhanced_lighting(canvas)
         else:
             # Legacy rendering - single filled circle with highlight
-            canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=self.color)
+            canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=atom_color)
             
             # Add basic highlight effect
             if ATOM_STYLE.get("highlight", {}).get("enabled", True):
@@ -83,7 +150,7 @@ class ZAtom(ZObject):
         canvas.draw_circle_border(
             self.x2d, self.y2d, 
             self.radius,
-            color=ATOM_STYLE["border_color"], 
+            color=border_color, 
             thickness=border_thickness
         )
         
@@ -101,7 +168,7 @@ class ZAtom(ZObject):
             self.x2d, self.y2d, 
             self.radius, int(self.radius * flatten),
             angle_start_deg=180, angle_end_deg=360,
-            color=ATOM_STYLE["border_color"], 
+            color=border_color, 
             thickness=meridian_thickness
         )
         
@@ -109,14 +176,16 @@ class ZAtom(ZObject):
             self.x2d, self.y2d, 
             int(self.radius * flatten), self.radius,
             angle_start_deg=270, angle_end_deg=450,
-            color=ATOM_STYLE["border_color"], 
+            color=border_color, 
             thickness=meridian_thickness
         )
 
         # Draw highlight if the atom is selected.
         if self.selected:
+            # Apply fog to highlight color
+            highlight_color = self.apply_fog(HIGHLIGHT["color"])
             # The extra border offset (+4) remains hard-coded; adjust if needed later.
-            canvas.draw_circle_border(self.x2d, self.y2d, self.radius + 4, color=HIGHLIGHT["color"], thickness=HIGHLIGHT["thickness_delta"])
+            canvas.draw_circle_border(self.x2d, self.y2d, self.radius + 4, color=highlight_color, thickness=HIGHLIGHT["thickness_delta"])
     
     def _draw_simple_highlight(self, canvas):
         """Draw the simple highlight effect used in the legacy rendering mode."""
@@ -144,6 +213,9 @@ class ZAtom(ZObject):
             highlight_g = min(255, int(base_g * brightness_factor))
             highlight_b = min(255, int(base_b * brightness_factor))
             highlight_color = (highlight_r, highlight_g, highlight_b)
+        
+        # Apply fog to highlight color
+        highlight_color = self.apply_fog(highlight_color)
         
         # Draw the highlight
         canvas.draw_filled_circle(highlight_x, highlight_y, highlight_radius, color=highlight_color)
@@ -183,6 +255,9 @@ class ZAtom(ZObject):
         ambient_g = int(base_g * ambient)
         ambient_b = int(base_b * ambient)
         ambient_color = (ambient_r, ambient_g, ambient_b)
+        
+        # Apply fog to the ambient color
+        ambient_color = self.apply_fog(ambient_color)
         
         # Draw base circle with ambient lighting
         canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=ambient_color)
@@ -244,6 +319,9 @@ class ZAtom(ZObject):
             b = min(255, int(base_b * light_factor))
             segment_color = (r, g, b)
             
+            # Apply fog to the segment color
+            segment_color = self.apply_fog(segment_color)
+            
             # For performance reasons, only draw segments with non-ambient lighting
             if light_factor > ambient:
                 # Draw this segment as a wedge from the circle center
@@ -285,13 +363,18 @@ class ZSegment(ZObject):
         self.vector = None  # Underlying vector instance (for vector segments)
 
     def draw(self, canvas):
+        # Apply fog to bond color
+        color = self.apply_fog(self.color)
+        
         # Draw the bond segment.
         canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
-                         thickness=self.thickness, color=self.color)
+                         thickness=self.thickness, color=color)
         # If selected, overlay a highlight using the configured settings.
         if self.selected:
+            # Apply fog to highlight color
+            highlight_color = self.apply_fog(HIGHLIGHT["color"])
             canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
-                             thickness=self.thickness + HIGHLIGHT["thickness_delta"], color=HIGHLIGHT["color"])
+                             thickness=self.thickness + HIGHLIGHT["thickness_delta"], color=highlight_color)
 
     def contains(self, x, y, tolerance=3):
         """
@@ -363,6 +446,9 @@ class ZArrowHead(ZObject):
         """
         Draw the arrowhead on the canvas.
         """
+        # Apply fog to arrowhead color
+        color = self.apply_fog(self.color)
+        
         # Use the canvas drawing methods
         if self.filled:
             # Draw as a filled triangle
@@ -375,7 +461,7 @@ class ZArrowHead(ZObject):
                 x1, y1,
                 x2, y2,
                 x3, y3,
-                color=self.color
+                color=color
             )
         else:
             # Draw as an outline triangle
@@ -383,17 +469,19 @@ class ZArrowHead(ZObject):
                 self.tip_x, self.tip_y,
                 self.corner1_x, self.corner1_y,
                 self.corner2_x, self.corner2_y,
-                color=self.color,
+                color=color,
                 thickness=self.thickness
             )
         
         # Draw highlight if selected
         if self.selected:
+            # Apply fog to highlight color
+            highlight_color = self.apply_fog(HIGHLIGHT["color"])
             highlight_thickness = self.thickness + HIGHLIGHT["thickness_delta"]
             canvas.draw_triangle(
                 self.tip_x, self.tip_y,
                 self.corner1_x, self.corner1_y,
                 self.corner2_x, self.corner2_y,
-                color=HIGHLIGHT["color"],
+                color=highlight_color,
                 thickness=highlight_thickness
             )

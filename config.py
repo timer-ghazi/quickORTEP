@@ -331,6 +331,15 @@ ATOM_STYLE = {
         "segments": 12,               # Number of segments for lighting calculation
         "gradient_steps": 8           # Number of gradient steps from dark to light
     },
+    
+    # Fog effect settings
+    "fog": {
+        "enabled": False,             # Turn fog effect on/off (toggled with enhanced lighting)
+        "start_distance": 5.0,        # Distance where fog starts (in Å)
+        "end_distance": 20.0,         # Distance where fog is maximum (in Å)
+        "max_intensity": 0.7,         # Maximum fog intensity (0.0-1.0)
+        "exponent": 1.0,              # Exponent for fog calculation (1.0 = linear, >1.0 = exponential)
+    },
 }
 
 # ================================

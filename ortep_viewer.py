@@ -1188,6 +1188,14 @@ class MoleculeViewer(X11Window):
         display_options = []
         display_options.append("H" if self.show_hydrogens else "no H")
         display_options.append("axes" if self.show_axes else "no axes")
+        
+        # Add lighting and fog status
+        from config import ATOM_STYLE
+        if ATOM_STYLE.get("lighting", {}).get("enabled", False):
+            display_options.append("3D lighting")
+        if ATOM_STYLE.get("fog", {}).get("enabled", False):
+            display_options.append("fog")
+            
         lines.append(f"Display: {', '.join(display_options)}")
         
         # Add graph mode info

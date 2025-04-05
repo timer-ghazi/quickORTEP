@@ -458,13 +458,21 @@ class _EventHandler:
         self.viewer.toggle_axes()
     
     def _toggle_enhanced_lighting(self):
-        """Toggle the enhanced 3D lighting model for atoms."""
+        """Toggle the enhanced 3D lighting model and fog effect for atoms."""
         from config import ATOM_STYLE
+        
+        # Toggle lighting
         lighting_enabled = ATOM_STYLE.get("lighting", {}).get("enabled", False)
         ATOM_STYLE["lighting"]["enabled"] = not lighting_enabled
         
+        # Toggle fog in sync with lighting
+        fog_enabled = ATOM_STYLE.get("fog", {}).get("enabled", False)
+        ATOM_STYLE["fog"]["enabled"] = not fog_enabled
+        
         status = "enabled" if ATOM_STYLE["lighting"]["enabled"] else "disabled"
-        self.viewer.message_service.log_info(f"Enhanced lighting {status}")
+        depth_status = "enabled" if ATOM_STYLE["fog"]["enabled"] else "disabled"
+        
+        self.viewer.message_service.log_info(f"Enhanced 3D effects {status} (lighting and depth fog)")
         self.viewer.redraw()
     
     def _toggle_normal_modes(self):
