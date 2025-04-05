@@ -101,6 +101,7 @@ class _EventHandler:
             'a': self._toggle_axes,  # Add axes toggle command
             't': self._standard_orientation, # Standard orientation (current frame)
             'T': self._standard_orientation_all, # Standard orientation (all frames)
+            '3': self._toggle_enhanced_lighting, # Toggle enhanced lighting model
             
             # Bond operations
             'p': self._toggle_graph_mode,
@@ -455,6 +456,16 @@ class _EventHandler:
     def _toggle_axes(self):
         """Toggle the visibility of the coordinate axes."""
         self.viewer.toggle_axes()
+    
+    def _toggle_enhanced_lighting(self):
+        """Toggle the enhanced 3D lighting model for atoms."""
+        from config import ATOM_STYLE
+        lighting_enabled = ATOM_STYLE.get("lighting", {}).get("enabled", False)
+        ATOM_STYLE["lighting"]["enabled"] = not lighting_enabled
+        
+        status = "enabled" if ATOM_STYLE["lighting"]["enabled"] else "disabled"
+        self.viewer.message_service.log_info(f"Enhanced lighting {status}")
+        self.viewer.redraw()
     
     def _toggle_normal_modes(self):
         """Toggle the display of normal mode vectors."""

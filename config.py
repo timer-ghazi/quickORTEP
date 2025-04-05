@@ -319,6 +319,18 @@ ATOM_STYLE = {
         "radius_factor": 1.1,   # Shadow size relative to atom radius
         "darkness": 40          # Shadow color darkness (0-255, lower = darker)
     },
+    
+    # Enhanced 3D lighting settings
+    "lighting": {
+        "enabled": False,              # Turn enhanced lighting on/off
+        "direction": (0.5, -0.5, 1),  # Global light direction vector (x, y, z)
+        "ambient": 0.3,               # Ambient light intensity (0.0-1.0)
+        "diffuse": 0.6,               # Diffuse reflection intensity (0.0-1.0)
+        "specular": 0.4,              # Specular reflection intensity (0.0-1.0)
+        "shininess": 16,              # Shininess power factor (higher = smaller highlight)
+        "segments": 12,               # Number of segments for lighting calculation
+        "gradient_steps": 8           # Number of gradient steps from dark to light
+    },
 }
 
 # ================================

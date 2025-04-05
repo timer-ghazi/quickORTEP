@@ -43,6 +43,43 @@ class ORTEP_MoleculeRenderer:
         
         # Project all rotated coordinates onto 2D screen in one go.
         screen_coords = project_points(rotated_coords, vp)
+        
+        # Compute view vector based on current rotation
+        # The view vector is the negative z-axis rotated by the view parameters
+        from math import sin, cos, radians
+        rx_rad, ry_rad, rz_rad = radians(vp.rx), radians(vp.ry), radians(vp.rz)
+        
+        # Start with -z axis (0, 0, -1) and rotate it by the view angles
+        # This gives us the direction from which we're viewing the molecule
+        cx, cy, cz = 0, 0, -1  # Initial camera direction along -z (looking toward origin)
+        
+        # Apply rotations in reverse order (rz, ry, rx) to the camera vector
+        # Rotation around x-axis
+        temp_y = cy * cos(rx_rad) - cz * sin(rx_rad)
+        temp_z = cy * sin(rx_rad) + cz * cos(rx_rad)
+        cy, cz = temp_y, temp_z
+        
+        # Rotation around y-axis
+        temp_x = cx * cos(ry_rad) + cz * sin(ry_rad)
+        temp_z = -cx * sin(ry_rad) + cz * cos(ry_rad)
+        cx, cz = temp_x, temp_z
+        
+        # Rotation around z-axis
+        temp_x = cx * cos(rz_rad) - cy * sin(rz_rad)
+        temp_y = cx * sin(rz_rad) + cy * cos(rz_rad)
+        cx, cy = temp_x, temp_y
+        
+        # Normalize the view vector
+        from math import sqrt
+        view_len = sqrt(cx*cx + cy*cy + cz*cz)
+        if view_len > 0:
+            view_vector = (cx/view_len, cy/view_len, cz/view_len)
+        else:
+            view_vector = (0, 0, 1)  # Default if calculation fails
+        
+        # Get light direction from config
+        from config import ATOM_STYLE
+        light_dir = ATOM_STYLE.get("lighting", {}).get("direction", (0.5, -0.5, 1.0))
 
         # Process each atom with its rotated and projected coordinates.
         for idx, atom in enumerate(ortep_molecule.atoms):
@@ -61,14 +98,21 @@ class ORTEP_MoleculeRenderer:
 
             # Get the 2D screen coordinates from the projected results.
             x2d, y2d = screen_coords[idx]
-
-            # Create a ZAtom for drawing.
+            
+            # Calculate normal vector - for atoms this isn't a single normal but 
+            # will be calculated per segment in the ZAtom class
+            normal_vector = None
+            
+            # Create a ZAtom for drawing with lighting parameters.
             z_atom = ZAtom(
                 x2d=x2d,
                 y2d=y2d,
                 radius=px_r,
                 color=self._get_atom_color(atom),
-                z_value=z_rot
+                z_value=z_rot,
+                normal_vector=normal_vector,
+                light_direction=light_dir,
+                view_vector=view_vector
             )
             # Attach underlying atom data and propagate its persistent selection state.
             z_atom.atom = atom
