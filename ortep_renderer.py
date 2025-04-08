@@ -212,55 +212,31 @@ class ORTEP_MoleculeRenderer:
             z_max = max(obj.z_value for obj in z_list)  # Closest objects (largest z)
             z_range = z_max - z_min
             
-            # Get fog parameters from view_params if available, otherwise use defaults
-            fog_start_factor = view_params.fog_current_start_factor if view_params.fog_current_start_factor is not None else FOG_STYLE["start_factor"]
-            fog_end_factor = view_params.fog_current_end_factor if view_params.fog_current_end_factor is not None else FOG_STYLE["end_factor"]
+            # Get fog density parameter from view_params if available, otherwise use default
             fog_density = view_params.fog_current_density if view_params.fog_current_density is not None else FOG_STYLE["density"]
-            
-            # Calculate absolute z depths for fog start/end
-            # Start closer to viewer (higher z-value) and end further away (lower z-value)
-            fog_start_depth = z_max - fog_start_factor * z_range  # Where fog begins (closer to viewer)
-            fog_end_depth = z_max - fog_end_factor * z_range     # Where fog is densest (further from viewer)
             
             # Determine fog color - use background color if not specified
             fog_color = FOG_STYLE["color"]
             if fog_color is None:
                 fog_color = canvas.background_color
-    # Draw all objects with fog effect applied if enabled
+                
+        # Draw all objects with fog effect applied if enabled
         for obj in z_list:
             # Apply fog if enabled
             if fog_mode > 0 and z_range > 0:
-                # Calculate fog factor based on the object's z_value
-                # --- REVISED LOGIC: Lower Z means farther away, needs more fog ---
-    
-                if fog_mode == 1:  # Linear fog
-                    # Factor should be 0 near fog_start_depth (closer) and 1 near fog_end_depth (farther)
-                    if fog_end_depth > fog_start_depth:
-                        # Linear interpolation: Calculate how far the object is into the fog range from the front
-                        # FIXED: Invert the calculation to make smaller z_values (further away) get more fog
-                        factor = (obj.z_value - fog_start_depth) / (fog_end_depth - fog_start_depth)
-                        # Invert the factor (1-factor) so objects with lower z_value (farther) get more fog
-                        factor = 1.0 - factor
-                        # Clamp between 0 and 1
-                        factor = max(0, min(1, factor))
-                    else:
-                        # Avoid division by zero if start and end are the same
-                        factor = 0 if obj.z_value <= fog_start_depth else 1
-    
-                elif fog_mode == 2:  # Exponential fog
-                    # Normalize Z based on distance from the *farthest* point (z_min)
-                    # FIXED: Invert normalization so further objects (smaller z_value) get more fog
-                    # normalized_z = 1 for farthest (z=z_min), decreases towards 0 for closest (z=z_max)
-                    normalized_z = max(0, (obj.z_value - z_min) / z_range) if z_range > 0 else 0
-                    
-                    # Use exponential falloff: 1 - e^(-density * normalized_distance_from_viewer^2)
-                    # Invert normalized_z so farther objects get more fog
-                    normalized_z = 1.0 - normalized_z
-                    factor = 1.0 - math.exp(-(fog_density * normalized_z)**2)
-    
-                    # Clamp between 0 and 1 (should already be in this range, but good practice)
-                    factor = max(0, min(1, factor))
-    
+                # Calculate fog factor based on the object's z_value using exponential fog
+                # Normalize Z based on distance from the *farthest* point (z_min)
+                # normalized_z = 1 for farthest (z=z_min), decreases towards 0 for closest (z=z_max)
+                normalized_z = max(0, (obj.z_value - z_min) / z_range) if z_range > 0 else 0
+                
+                # Use exponential falloff: 1 - e^(-density * normalized_distance_from_viewer^2)
+                # Invert normalized_z so farther objects get more fog
+                normalized_z = 1.0 - normalized_z
+                factor = 1.0 - math.exp(-(fog_density * normalized_z)**2)
+
+                # Clamp between 0 and 1 (should already be in this range, but good practice)
+                factor = max(0, min(1, factor))
+
                 # --- Interpolate between object's color and fog color ---
                 if hasattr(obj, 'color'):
                     r1, g1, b1 = obj.color

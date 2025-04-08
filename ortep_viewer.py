@@ -53,8 +53,6 @@ class ViewParams:
         self.as_float = False
         # Fog parameters
         self.fog_mode = None
-        self.fog_current_start_factor = None
-        self.fog_current_end_factor = None
         self.fog_current_density = None
 
 
@@ -983,8 +981,6 @@ class MoleculeViewer(X11Window):
         # Fog effect settings (initialized from FOG_STYLE in config)
         from config import FOG_STYLE
         self.fog_mode = FOG_STYLE["mode"]
-        self.fog_current_start_factor = FOG_STYLE["start_factor"]
-        self.fog_current_end_factor = FOG_STYLE["end_factor"]
         self.fog_current_density = FOG_STYLE["density"]
         
         # Expose graph properties for compatibility with event_handler
@@ -1122,8 +1118,6 @@ class MoleculeViewer(X11Window):
         
         # Update view_params with current fog settings before rendering
         self.view_params.fog_mode = self.fog_mode
-        self.view_params.fog_current_start_factor = self.fog_current_start_factor
-        self.view_params.fog_current_end_factor = self.fog_current_end_factor
         self.view_params.fog_current_density = self.fog_current_density
     
         # Draw the main molecule (atoms, bonds, vectors)
@@ -1232,11 +1226,7 @@ class MoleculeViewer(X11Window):
         
         # Add fog status if enabled
         if self.fog_mode > 0:
-            fog_type = "LIN" if self.fog_mode == 1 else "EXP"
-            if self.fog_mode == 1:  # Linear fog
-                fog_info = f"Fog: {fog_type} [S:{self.fog_current_start_factor:.2f} E:{self.fog_current_end_factor:.2f}]"
-            else:  # Exponential fog
-                fog_info = f"Fog: {fog_type} [D:{self.fog_current_density:.1f}]"
+            fog_info = f"Fog: ON [D:{self.fog_current_density:.1f}]"
             display_options.append(fog_info)
         else:
             display_options.append("no fog")
