@@ -74,7 +74,18 @@ class ZAtom(ZObject):
         )
         
         # Use border color with fog effect if color override is provided
-        border_color = color_override if color_override is not None else ATOM_STYLE["border_color"]
+        # For fog effects, don't fully override the border color, but blend it with the theme color
+        if color_override is not None:
+            # Use a less aggressive fog effect for borders - blend 70% override and 30% original border color 
+            r1, g1, b1 = color_override
+            r2, g2, b2 = ATOM_STYLE["border_color"]
+            border_color = (
+                int(0.7 * r1 + 0.3 * r2),
+                int(0.7 * g1 + 0.3 * g2),
+                int(0.7 * b1 + 0.3 * b2)
+            )
+        else:
+            border_color = ATOM_STYLE["border_color"]
         
         # Draw the atom border with scaled thickness
         canvas.draw_circle_border(
@@ -93,7 +104,7 @@ class ZAtom(ZObject):
         # Get arc flattening factor
         flatten = ARC_STYLE["flatten"]
         
-        # Draw ORTEP arcs with scaled thickness
+        # Use the same border_color that has been adjusted for fog
         canvas.draw_arc(
             self.x2d, self.y2d, 
             self.radius, int(self.radius * flatten),

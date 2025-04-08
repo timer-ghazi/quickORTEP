@@ -51,6 +51,11 @@ class ViewParams:
         self.x_offset = x_offset
         self.y_offset = y_offset
         self.as_float = False
+        # Fog parameters
+        self.fog_mode = None
+        self.fog_current_start_factor = None
+        self.fog_current_end_factor = None
+        self.fog_current_density = None
 
 
 class _NormalModeManager:
@@ -1114,6 +1119,12 @@ class MoleculeViewer(X11Window):
     
         # Draw grid if enabled
         self._view_manager.draw_grid()
+        
+        # Update view_params with current fog settings before rendering
+        self.view_params.fog_mode = self.fog_mode
+        self.view_params.fog_current_start_factor = self.fog_current_start_factor
+        self.view_params.fog_current_end_factor = self.fog_current_end_factor
+        self.view_params.fog_current_density = self.fog_current_density
     
         # Draw the main molecule (atoms, bonds, vectors)
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
