@@ -975,6 +975,13 @@ class MoleculeViewer(X11Window):
         self.show_axes = self._view_manager.show_axes
         self.show_help = self._view_manager.show_help
         
+        # Fog effect settings (initialized from FOG_STYLE in config)
+        from config import FOG_STYLE
+        self.fog_mode = FOG_STYLE["mode"]
+        self.fog_current_start_factor = FOG_STYLE["start_factor"]
+        self.fog_current_end_factor = FOG_STYLE["end_factor"]
+        self.fog_current_density = FOG_STYLE["density"]
+        
         # Expose graph properties for compatibility with event_handler
         self.energy_graph = None  # This will be updated when _graph_manager creates it
         self.graph_mode = "energy"  # Initialize to match _graph_manager
@@ -1211,6 +1218,17 @@ class MoleculeViewer(X11Window):
         from config import ATOM_STYLE
         effects_enabled = ATOM_STYLE["highlight"]["enabled"] and ATOM_STYLE["shadow"]["enabled"]
         display_options.append("3D" if effects_enabled else "no 3D")
+        
+        # Add fog status if enabled
+        if self.fog_mode > 0:
+            fog_type = "LIN" if self.fog_mode == 1 else "EXP"
+            if self.fog_mode == 1:  # Linear fog
+                fog_info = f"Fog: {fog_type} [S:{self.fog_current_start_factor:.2f} E:{self.fog_current_end_factor:.2f}]"
+            else:  # Exponential fog
+                fog_info = f"Fog: {fog_type} [D:{self.fog_current_density:.1f}]"
+            display_options.append(fog_info)
+        else:
+            display_options.append("no fog")
         
         lines.append(f"Display: {', '.join(display_options)}")
         

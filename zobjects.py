@@ -10,7 +10,7 @@ class ZObject:
         self.z_value = z_value
         self.selected = False  # Selection state
 
-    def draw(self, canvas):
+    def draw(self, canvas, color_override=None):
         raise NotImplementedError("Subclasses must implement draw().")
 
 
@@ -28,7 +28,10 @@ class ZAtom(ZObject):
         self.color = color
         self.atom = None  # Underlying ORTEP_Atom instance
 
-    def draw(self, canvas):
+    def draw(self, canvas, color_override=None):
+        # Use the color override if provided (for fog effect)
+        atom_color = color_override if color_override is not None else self.color
+        
         # Add shadow for 3D effect (DRAW THIS FIRST)
         if ATOM_STYLE.get("shadow", {}).get("enabled", True):
             # Get shadow parameters from config or use defaults
@@ -58,7 +61,7 @@ class ZAtom(ZObject):
             canvas.draw_filled_circle(shadow_x, shadow_y, shadow_radius, color=shadow_color)
             
         # Draw the filled circle.
-        canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=self.color)
+        canvas.draw_filled_circle(self.x2d, self.y2d, self.radius, color=atom_color)
         
         # Get the current zoom level for scaled thickness calculations
         from config import VIEWER_INTERACTION
@@ -70,11 +73,14 @@ class ZAtom(ZObject):
             int(ATOM_STYLE.get("border_thickness", 0.02) * current_zoom)
         )
         
+        # Use border color with fog effect if color override is provided
+        border_color = color_override if color_override is not None else ATOM_STYLE["border_color"]
+        
         # Draw the atom border with scaled thickness
         canvas.draw_circle_border(
             self.x2d, self.y2d, 
             self.radius,
-            color=ATOM_STYLE["border_color"], 
+            color=border_color, 
             thickness=border_thickness
         )
         
@@ -92,7 +98,7 @@ class ZAtom(ZObject):
             self.x2d, self.y2d, 
             self.radius, int(self.radius * flatten),
             angle_start_deg=180, angle_end_deg=360,
-            color=ATOM_STYLE["border_color"], 
+            color=border_color, 
             thickness=meridian_thickness
         )
         
@@ -100,7 +106,7 @@ class ZAtom(ZObject):
             self.x2d, self.y2d, 
             int(self.radius * flatten), self.radius,
             angle_start_deg=270, angle_end_deg=450,
-            color=ATOM_STYLE["border_color"], 
+            color=border_color, 
             thickness=meridian_thickness
         )
         
@@ -119,8 +125,8 @@ class ZAtom(ZObject):
             highlight_x = self.x2d + highlight_offset_x
             highlight_y = self.y2d + highlight_offset_y
             
-            # Calculate highlight color based on atom color
-            base_r, base_g, base_b = self.color
+            # Calculate highlight color based on atom color (use the overridden color if provided)
+            base_r, base_g, base_b = atom_color
             if use_white_for_dark and (base_r + base_g + base_b) / 3 < 100:
                 # For dark atoms, use white highlight
                 highlight_color = (255, 255, 255)
@@ -169,10 +175,13 @@ class ZSegment(ZObject):
         self.bond = None  # Underlying bond instance
         self.vector = None  # Underlying vector instance (for vector segments)
 
-    def draw(self, canvas):
+    def draw(self, canvas, color_override=None):
+        # Use the color override if provided (for fog effect)
+        segment_color = color_override if color_override is not None else self.color
+        
         # Draw the bond segment.
         canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
-                         thickness=self.thickness, color=self.color)
+                         thickness=self.thickness, color=segment_color)
         # If selected, overlay a highlight using the configured settings.
         if self.selected:
             canvas.draw_line(self.x1, self.y1, self.x2, self.y2,
@@ -244,10 +253,17 @@ class ZArrowHead(ZObject):
                             int(VECTOR_STYLE["thickness"] * 1.5))  # Slightly thicker than shaft
         self.vector = None  # Underlying vector instance
 
-    def draw(self, canvas):
+    def draw(self, canvas, color_override=None):
         """
         Draw the arrowhead on the canvas.
+        
+        Parameters:
+            canvas: The canvas to draw on
+            color_override: Optional color override for fog effect
         """
+        # Use the color override if provided (for fog effect)
+        arrow_color = color_override if color_override is not None else self.color
+        
         # Use the canvas drawing methods
         if self.filled:
             # Draw as a filled triangle
@@ -260,7 +276,7 @@ class ZArrowHead(ZObject):
                 x1, y1,
                 x2, y2,
                 x3, y3,
-                color=self.color
+                color=arrow_color
             )
         else:
             # Draw as an outline triangle
@@ -268,7 +284,7 @@ class ZArrowHead(ZObject):
                 self.tip_x, self.tip_y,
                 self.corner1_x, self.corner1_y,
                 self.corner2_x, self.corner2_y,
-                color=self.color,
+                color=arrow_color,
                 thickness=self.thickness
             )
         

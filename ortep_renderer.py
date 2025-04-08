@@ -193,10 +193,126 @@ class ORTEP_MoleculeRenderer:
     def draw_molecule(self, canvas, ortep_molecule, view_params):
         """
         Draw the molecule by building a render list, sorting by z-value,
-        and drawing each object in order.
+        and drawing each object in order with optional fog effect.
         """
+        import math
+        from config import FOG_STYLE
+        
         z_list = self.build_render_list(ortep_molecule, view_params)
         # Sort objects so that those with higher z_value (closer) are drawn last.
         z_list.sort(key=lambda obj: obj.z_value, reverse=True)
+        
+        # Get fog mode from view parameters or default to FOG_STYLE
+        fog_mode = getattr(view_params, 'fog_mode', FOG_STYLE["mode"])
+        
+        # If fog is enabled, calculate z range for the fog effect
+        if fog_mode > 0 and z_list:
+            # Determine min/max z values in the render list
+            z_min = min(obj.z_value for obj in z_list)
+            z_max = max(obj.z_value for obj in z_list)
+            z_range = z_max - z_min
+            
+            # Get fog parameters from view_params if available, otherwise use defaults
+            fog_start_factor = getattr(view_params, 'fog_current_start_factor', 
+                                     FOG_STYLE["start_factor"])
+            fog_end_factor = getattr(view_params, 'fog_current_end_factor', 
+                                   FOG_STYLE["end_factor"])
+            fog_density = getattr(view_params, 'fog_current_density', 
+                                FOG_STYLE["density"])
+            
+            # Calculate absolute z depths for fog start/end
+            fog_start_depth = z_min + fog_start_factor * z_range
+            fog_end_depth = z_min + fog_end_factor * z_range
+            
+            # Determine fog color - use background color if not specified
+            fog_color = FOG_STYLE["color"]
+            if fog_color is None:
+                fog_color = canvas.background_color
+    # Draw all objects with fog effect applied if enabled
         for obj in z_list:
-            obj.draw(canvas)
+            # Apply fog if enabled
+            if fog_mode > 0 and z_range > 0:
+                # Calculate fog factor based on the object's z_value
+                # --- REVISED LOGIC: Lower Z means farther away, needs more fog ---
+    
+                if fog_mode == 1:  # Linear fog
+                    # Factor should be 0 near fog_end_depth (closer) and 1 near fog_start_depth (farther)
+                    if fog_end_depth > fog_start_depth:
+                        # Inverse linear interpolation: Calculate how far the object is into the fog range from the back
+                        factor = (fog_end_depth - obj.z_value) / (fog_end_depth - fog_start_depth)
+                        # Clamp between 0 and 1
+                        factor = max(0, min(1, factor))
+                    else:
+                        # Avoid division by zero if start and end are the same
+                        factor = 0 if obj.z_value >= fog_end_depth else 1
+    
+                elif fog_mode == 2:  # Exponential fog
+                    # Normalize Z based on distance from the *closest* point (z_max)
+                    # normalized_z = 0 for closest (z=z_max), increases towards 1 for farthest (z=z_min)
+                    normalized_z = max(0, (z_max - obj.z_value) / z_range) if z_range > 0 else 0
+    
+                    # Use exponential falloff: 1 - e^(-density * normalized_distance_from_viewer^2)
+                    # A higher normalized_z (farther away) results in a higher factor (more fog)
+                    factor = 1.0 - math.exp(-(fog_density * normalized_z)**2) # Using the squared exponent as originally intended
+    
+                    # Clamp between 0 and 1 (should already be in this range, but good practice)
+                    factor = max(0, min(1, factor))
+    
+                # --- Interpolate between object's color and fog color ---
+                if hasattr(obj, 'color'):
+                    r1, g1, b1 = obj.color
+                    r2, g2, b2 = fog_color
+                    # Linear interpolation: final = original + factor * (target - original)
+                    final_color = (
+                        int(r1 + factor * (r2 - r1)),
+                        int(g1 + factor * (g2 - g1)),
+                        int(b1 + factor * (b2 - b1))
+                    )
+                    # Draw with fogged color
+                    obj.draw(canvas, color_override=final_color)
+                else:
+                    # Object doesn't have a color attribute, draw normally
+                    obj.draw(canvas)
+            else:
+                # No fog, draw normally
+                obj.draw(canvas)        
+#--        # Draw all objects with fog effect applied if enabled
+#--        for obj in z_list:
+#--            # Apply fog if enabled
+#--            if fog_mode > 0 and z_range > 0:
+#--                # Calculate fog factor based on the object's z_value
+#--                if fog_mode == 1:  # Linear fog
+#--                    # Ensure no division by zero
+#--                    if fog_end_depth > fog_start_depth:
+#--                        # Linear interpolation: 0 at fog_start_depth, 1 at fog_end_depth
+#--                        factor = (obj.z_value - fog_start_depth) / (fog_end_depth - fog_start_depth)
+#--                        # Clamp between 0 and 1
+#--                        factor = max(0, min(1, factor))
+#--                    else:
+#--                        factor = 0
+#--                elif fog_mode == 2:  # Exponential fog
+#--                    # Use exponential falloff: 1-e^(-(density*(z-z_min))²)
+#--                    # This gives more control over the fog intensity
+#--                    normalized_z = max(0, (obj.z_value - z_min) / z_range)
+#--                    factor = 1.0 - math.exp(-(fog_density * normalized_z)**2)
+#--                    # Clamp between 0 and 1 (should already be in this range)
+#--                    factor = max(0, min(1, factor))
+#--                
+#--                # Interpolate between object's color and fog color
+#--                if hasattr(obj, 'color'):
+#--                    r1, g1, b1 = obj.color
+#--                    r2, g2, b2 = fog_color
+#--                    # Linear interpolation between colors
+#--                    final_color = (
+#--                        int(r1 + factor * (r2 - r1)),
+#--                        int(g1 + factor * (g2 - g1)),
+#--                        int(b1 + factor * (b2 - b1))
+#--                    )
+#--                    # Draw with fogged color
+#--                    obj.draw(canvas, color_override=final_color)
+#--                else:
+#--                    # Object doesn't have a color attribute, draw normally
+#--                    obj.draw(canvas)
+#--            else:
+#--                # No fog, draw normally
+#--                obj.draw(canvas)

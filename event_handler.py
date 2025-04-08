@@ -102,6 +102,11 @@ class _EventHandler:
             't': self._standard_orientation, # Standard orientation (current frame)
             'T': self._standard_orientation_all, # Standard orientation (all frames)
             '3': self._toggle_3d_effects,  # Toggle 3D effects (highlights and shadows)
+            'f': self._toggle_fog_mode,     # Toggle fog modes (OFF/LINEAR/EXP)
+            '9': self._adjust_fog_start,    # Decrease start factor (LINEAR) or no effect (EXP)
+            '0': self._adjust_fog_start_up, # Increase start factor (LINEAR) or no effect (EXP)
+            '(': self._adjust_fog_end,      # Decrease end factor (LINEAR) or density (EXP)
+            ')': self._adjust_fog_end_up,   # Increase end factor (LINEAR) or density (EXP)
             
             # Bond operations
             'p': self._toggle_graph_mode,
@@ -126,7 +131,7 @@ class _EventHandler:
             '>': self._increase_normal_mode_scale,     # Increase scale
             
             # Reset/fit operations
-            'f': self._fit_molecule_to_window,
+            'F': self._fit_molecule_to_window,  # Changed from 'f' to 'F' to avoid conflict with fog toggle
             'r': self._reset_view,
 
             'R': self._reload_file,
@@ -801,6 +806,90 @@ class _EventHandler:
         # Clear vector selections (if any)
         for vector in self.viewer.ortep_mol.vectors:
             vector.selected = False
+
+    # Fog effect handlers
+    def _toggle_fog_mode(self):
+        """Toggle fog mode between OFF, LINEAR, and EXPONENTIAL."""
+        from config import FOG_STYLE
+        
+        # Cycle through modes: 0 (OFF) -> 1 (LINEAR) -> 2 (EXPONENTIAL) -> 0 (OFF)
+        self.viewer.fog_mode = (self.viewer.fog_mode + 1) % 3
+        
+        # Log simple message
+        modes = ["disabled", "linear", "exponential"]
+        self.viewer.message_service.log_info(f"Fog effect: {modes[self.viewer.fog_mode]}")
+        
+        # Trigger redraw to apply changes
+        self.viewer.redraw()
+    
+    def _adjust_fog_start(self):
+        """Decrease start factor for linear fog."""
+        from config import FOG_STYLE
+        
+        if self.viewer.fog_mode == 1:  # LINEAR fog
+            # Decrease start factor (with lower limit of 0.0)
+            self.viewer.fog_current_start_factor = max(
+                0.0, 
+                self.viewer.fog_current_start_factor - FOG_STYLE["adjustment_step_linear"]
+            )
+            # No message, values are shown in HUD
+            self.viewer.redraw()
+    
+    def _adjust_fog_start_up(self):
+        """Increase start factor for linear fog."""
+        from config import FOG_STYLE
+        
+        if self.viewer.fog_mode == 1:  # LINEAR fog
+            # Increase start factor (with upper limit of end_factor)
+            self.viewer.fog_current_start_factor = min(
+                self.viewer.fog_current_end_factor, 
+                self.viewer.fog_current_start_factor + FOG_STYLE["adjustment_step_linear"]
+            )
+            # No message, values are shown in HUD
+            self.viewer.redraw()
+    
+    def _adjust_fog_end(self):
+        """
+        Decrease end factor for linear fog or density for exponential fog.
+        """
+        from config import FOG_STYLE
+        
+        if self.viewer.fog_mode == 1:  # LINEAR fog
+            # Decrease end factor (with lower limit of start_factor)
+            self.viewer.fog_current_end_factor = max(
+                self.viewer.fog_current_start_factor, 
+                self.viewer.fog_current_end_factor - FOG_STYLE["adjustment_step_linear"]
+            )
+            # No message, values are shown in HUD
+        elif self.viewer.fog_mode == 2:  # EXPONENTIAL fog
+            # Decrease density (with lower limit of 0.1)
+            self.viewer.fog_current_density = max(
+                0.1, 
+                self.viewer.fog_current_density - FOG_STYLE["adjustment_step_exp"]
+            )
+            # No message, values are shown in HUD
+        
+        self.viewer.redraw()
+    
+    def _adjust_fog_end_up(self):
+        """
+        Increase end factor for linear fog or density for exponential fog.
+        """
+        from config import FOG_STYLE
+        
+        if self.viewer.fog_mode == 1:  # LINEAR fog
+            # Increase end factor (with upper limit of 1.0)
+            self.viewer.fog_current_end_factor = min(
+                1.0, 
+                self.viewer.fog_current_end_factor + FOG_STYLE["adjustment_step_linear"]
+            )
+            # No message, values are shown in HUD
+        elif self.viewer.fog_mode == 2:  # EXPONENTIAL fog
+            # Increase density (no specific upper limit)
+            self.viewer.fog_current_density += FOG_STYLE["adjustment_step_exp"]
+            # No message, values are shown in HUD
+        
+        self.viewer.redraw()
 
     def _toggle_help(self):
         """

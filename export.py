@@ -74,10 +74,27 @@ def export_svg(canvas, renderer, molecule, view_params, filename="quickORTEP_exp
     DISTANCE_BOND["color"] = PRINT_THEME["distance_bond_color"]
     HIGHLIGHT["color"] = PRINT_THEME["highlight_color"]
     
+    # For SVG export, create a copy of view_params to customize fog settings
+    from config import FOG_STYLE
+    import copy
+    svg_view_params = copy.copy(view_params)
+    
+    # Maintain fog_mode and parameters from viewer, but use print theme background color
+    # for the fog_color when needed
+    if hasattr(view_params, 'fog_mode') and view_params.fog_mode > 0:
+        # Override FOG_STYLE["color"] with PRINT_THEME's background color for export
+        # but keep the original fog mode, factors, and density
+        FOG_STYLE_original_color = FOG_STYLE["color"]
+        FOG_STYLE["color"] = PRINT_THEME["background_color"]
+    
     # Render with print theme
     view_params.as_float = True
     renderer.draw_molecule(svg_canvas, molecule, view_params)
     view_params.as_float = False
+    
+    # Restore original FOG_STYLE color if we changed it
+    if hasattr(view_params, 'fog_mode') and view_params.fog_mode > 0:
+        FOG_STYLE["color"] = FOG_STYLE_original_color
     
     # Restore original settings
     ATOM_STYLE["border_color"] = original_settings['atom_border_color']

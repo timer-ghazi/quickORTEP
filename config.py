@@ -219,6 +219,19 @@ CURRENT_THEME = SCIFI_THEME
 ANGSTROM_TO_PIXEL = 100
 
 # ================================
+# Fog Effect Settings
+# ================================
+FOG_STYLE = {
+    "mode": 0,  # 0: Off, 1: Linear, 2: Exponential
+    "start_factor": 0.1, # Relative start point (0.0 to 1.0) of Z-range
+    "end_factor": 0.9,   # Relative end point (0.0 to 1.0) of Z-range
+    "density": 1.0,      # Density for exponential mode
+    "color": None,       # Target color (None uses current background)
+    "adjustment_step_linear": 0.05, # Step for start/end factor adjustment
+    "adjustment_step_exp": 0.1      # Step for density adjustment
+}
+
+# ================================
 # Energy Unit Settings
 # ================================
 ENERGY_UNITS = {
