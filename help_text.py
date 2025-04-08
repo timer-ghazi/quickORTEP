@@ -12,14 +12,15 @@ HELP_TEXT = [
     " n,m => zoom in/out    < / > => scale normal modes   d => show/hide hydrogens      ",
     " f => fit molecule     t => standard orientation     g => toggle grid              ",
     " r => reset view       T => std. orient. all frames  a => toggle axes              ",
-    " q / Esc => quit       R => reload current file      s => export SVG               ",
+    " q / Esc => quit       R => reload current file      3 => toggle 3D effects        ",
+    "                                                     s => export SVG               ",
     "                                                     x => export XYZ               ",
     "                                                     w => export current graph data",
     "",
     " MOUSE COMMANDS",
     " Left drag => rotate         Middle drag => rotate Z",
     " Right drag => pan           Mouse wheel => zoom in/out",
-    " Shift+Left => multi-select  Shift+Double-click => reset view                      "
+    " Shift+Left => multi-select  Shift+Double-click => reset view                      ",
     "",
     "===================================================================================",
 ]

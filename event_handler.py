@@ -101,6 +101,7 @@ class _EventHandler:
             'a': self._toggle_axes,  # Add axes toggle command
             't': self._standard_orientation, # Standard orientation (current frame)
             'T': self._standard_orientation_all, # Standard orientation (all frames)
+            '3': self._toggle_3d_effects,  # Toggle 3D effects (highlights and shadows)
             
             # Bond operations
             'p': self._toggle_graph_mode,
@@ -455,6 +456,10 @@ class _EventHandler:
     def _toggle_axes(self):
         """Toggle the visibility of the coordinate axes."""
         self.viewer.toggle_axes()
+        
+    def _toggle_3d_effects(self):
+        """Toggle 3D effects (atom highlights and shadows)."""
+        self.viewer.toggle_3d_effects()
     
     def _toggle_normal_modes(self):
         """Toggle the display of normal mode vectors."""

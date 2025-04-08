@@ -304,7 +304,7 @@ ATOM_STYLE = {
     
     # 3D highlight settings
     "highlight": {
-        "enabled": True,           # Turn the effect on/off
+        "enabled": False,           # Turn the effect on/off (disabled by default for better performance)
         "size_ratio": 0.3,         # Size relative to atom radius
         "offset_ratio": 0.4,       # Offset from center (towards upper-left)
         "brightness_factor": 1.5,  # For calculated highlight color
@@ -313,7 +313,7 @@ ATOM_STYLE = {
     
     # 3D shadow settings
     "shadow": {
-        "enabled": True,        # Turn the effect on/off
+        "enabled": False,        # Turn the effect on/off (disabled by default for better performance)
         "offset_x": 2,          # Horizontal shadow offset (positive = right)
         "offset_y": 3,          # Vertical shadow offset (positive = down)
         "radius_factor": 1.1,   # Shadow size relative to atom radius

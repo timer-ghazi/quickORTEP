@@ -784,6 +784,24 @@ class _ViewManager:
         status = "shown" if self.show_hydrogens else "hidden"
         self.viewer.message_service.log_info(f"Hydrogens {status}")
         self.viewer.set_frame(self.viewer.current_frame)
+        
+    def toggle_3d_effects(self):
+        """Toggle 3D effects (atom highlights and shadows) on and off."""
+        from config import ATOM_STYLE
+        
+        # Toggle both highlight and shadow settings
+        ATOM_STYLE["highlight"]["enabled"] = not ATOM_STYLE["highlight"]["enabled"]
+        ATOM_STYLE["shadow"]["enabled"] = not ATOM_STYLE["shadow"]["enabled"]
+        
+        # Get current state for message
+        enabled = ATOM_STYLE["highlight"]["enabled"]
+        status = "enabled" if enabled else "disabled"
+        
+        # Log message to user
+        self.viewer.message_service.log_info(f"3D effects {status}")
+        
+        # Redraw to apply changes
+        self.viewer.redraw()
 
     def fit_molecule_to_window(self):
         """Fit the molecule to the window by adjusting scale and offset."""
@@ -1188,6 +1206,12 @@ class MoleculeViewer(X11Window):
         display_options = []
         display_options.append("H" if self.show_hydrogens else "no H")
         display_options.append("axes" if self.show_axes else "no axes")
+        
+        # Add 3D effects status
+        from config import ATOM_STYLE
+        effects_enabled = ATOM_STYLE["highlight"]["enabled"] and ATOM_STYLE["shadow"]["enabled"]
+        display_options.append("3D" if effects_enabled else "no 3D")
+        
         lines.append(f"Display: {', '.join(display_options)}")
         
         # Add graph mode info
@@ -1236,6 +1260,10 @@ class MoleculeViewer(X11Window):
     def toggle_hydrogens(self):
         """Toggle the display of hydrogen atoms."""
         self._view_manager.toggle_hydrogens()
+        
+    def toggle_3d_effects(self):
+        """Toggle 3D effects (atom highlights and shadows)."""
+        self._view_manager.toggle_3d_effects()
 
     def clear_bond_edits(self):
         """Clear all bond edits and refresh the current frame."""
