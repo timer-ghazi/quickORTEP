@@ -231,7 +231,7 @@ class ORTEP_MoleculeRenderer:
                 
                 # Use exponential falloff: 1 - e^(-density * normalized_distance_from_viewer^2)
                 # Invert normalized_z so farther objects get more fog
-                normalized_z = 1.0 - normalized_z
+                # normalized_z = 1.0 - normalized_z
                 factor = 1.0 - math.exp(-(fog_density * normalized_z)**2)
 
                 # Clamp between 0 and 1 (should already be in this range, but good practice)
