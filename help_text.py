@@ -20,7 +20,7 @@ HELP_TEXT = [
     "DISPLAY OPTIONS",
     "  Atom Display:        d => toggle hydrogens     3 => toggle 3D effects",
     "  References:          g => toggle grid          a => toggle axes",
-    "  Fog Effects:         f => cycle fog modes      ( / ) => adjust fog density",
+    "  Fog Effects:         f => toggle fog           ( / ) => adjust fog density",
     "",
     "TRAJECTORY & NORMAL MODES",
     "  Frame Navigation:    [ / ] => prev/next frame  { / } => first/last frame",
