@@ -26,13 +26,15 @@ quickORTEP is a Python-based molecular visualization tool inspired by the classi
 - **Normal mode visualization** for vibrational analysis
 - **SVG export** for high-quality publication graphics
 - **Grid and coordinate axes display** for spatial reference
+- **3D visual effects** and depth-based fog for enhanced visualization
+- **Multiple visual themes** (Light, Dark, Matrix, Sci-Fi, Print)
 - **Keyboard-driven interface** for efficient workflow
 
 ## Installation
 
 ### Dependencies
 
-- Python 3.6+
+- Python 3.9+
 - numpy (≥1.19.0)
 - python-xlib (≥0.31)
 - Pillow (≥8.0.0)
@@ -40,7 +42,22 @@ quickORTEP is a Python-based molecular visualization tool inspired by the classi
 
 ### Installation Methods
 
-#### Option 1: Install via pip (recommended)
+#### Option 1: Install via Conda (recommended)
+
+```bash
+# Create a new environment for quickORTEP
+conda create -n quickortep python=3.9
+conda activate quickortep
+
+# Install dependencies
+conda install numpy
+conda install -c conda-forge python-xlib pillow
+
+# Install quickORTEP (from the project directory)
+pip install .
+```
+
+#### Option 2: Install via pip
 
 ```bash
 # From the project directory
@@ -50,7 +67,7 @@ pip install .
 pip install git+https://github.com/yourusername/quickORTEP.git
 ```
 
-#### Option 2: Install using setup.py directly
+#### Option 3: Install using setup.py directly
 
 ```bash
 # From the project directory
@@ -60,7 +77,7 @@ python setup.py install
 python setup.py develop
 ```
 
-#### Option 3: Install from source without installation
+#### Option 4: Install from source without installation
 
 ```bash
 # Clone the repository
@@ -156,7 +173,10 @@ quickortep molecule.xyz 2 256
 - **u/o**: Rotate around Z-axis
 - **H/J/K/L**: Pan the view
 - **n/m**: Zoom in/out
-- **f**: Fit molecule to window
+- **f**: Toggle fog effect
+- **( / )**: Decrease/increase fog density
+- **3**: Toggle 3D effects (highlights and shadows)
+- **F**: Fit molecule to window
 - **r**: Reset view
 
 #### Atom and Bond Manipulation
@@ -173,6 +193,9 @@ quickortep molecule.xyz 2 256
 - **[/]**: Previous/next frame
 - **{/}**: First/last frame
 - **-/=**: Jump to lowest/highest energy frame
+- **t**: Convert current frame to standard orientation
+- **T**: Convert all frames to standard orientation
+- **R**: Reload current file from disk
 
 #### Normal Mode Visualization
 
@@ -230,6 +253,22 @@ For Gaussian frequency calculation results:
 4. Use < and > to adjust the visualization scale
 5. Imaginary frequencies are displayed in red
 
+### Visual Effects
+
+Enhance your visualization with depth effects:
+
+1. Press 'f' to toggle the fog effect (adds depth perception)
+2. Use ( and ) to adjust fog density
+3. Press '3' to toggle 3D effects (highlights and shadows on atoms)
+4. Use different themes for different visualization purposes
+
+### Standard Orientation
+
+Convert molecule coordinates to a standardized orientation:
+
+1. Press 't' to convert the current frame to standard orientation
+2. Press 'T' to convert all frames in a trajectory to standard orientation
+
 ### SVG Export
 
 Press 's' to export the current view as an SVG file, which is useful for creating publication-quality figures.
@@ -262,6 +301,12 @@ Edit `config.py` to customize:
 - Interaction settings
 - Graph themes
 - Color schemes (light, dark, sci-fi, matrix, and print themes available)
+
+To change themes, modify the `CURRENT_THEME` variable in `config.py`:
+```python
+# Options: LIGHT_THEME, DARK_THEME, SCIFI_THEME, MATRIX_THEME, PRINT_THEME
+CURRENT_THEME = LIGHT_THEME  # Change to your preferred theme
+```
 
 ## Exporting Data
 
@@ -302,4 +347,4 @@ The project is organized into several modules:
 
 ## Acknowledgments
 
-Coded using the following LLMs: ChatGPT (o1 Pro and o3-mini-high) and Claude (3.7 Sonnet Extended)
+Coded using the following LLMs: ChatGPT (o1 Pro and o3-mini-high), Claude (3.7 Sonnet Extended), and Gemini (2.5 Pro). 
