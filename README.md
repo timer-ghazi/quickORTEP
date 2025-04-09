@@ -1,16 +1,19 @@
 # quickORTEP
 
-A lightweight, fast molecular visualization tool with interactive bond editing, trajectory analysis, and normal mode visualization capabilities.
+A lightweight, fast molecular visualization tool with interactive bond editing, trajectory analysis, and normal mode visualization capabilities designed as a quick visualization tool to be called from a command line, typically through remote SSH connections to HPC systems. 
 
 ![quickORTEP Visualization](images/qo-1.png)
+**Figure 1:** quickORTEP molecular visualization interface showing interactive X11 views with sci-fi theme (top row) alongside their corresponding publication-ready SVG exports (bottom row). The left panels demonstrate atom selection and energy plotting while the right panels show bond selection with length measurement, illustrating the viewer's dual capability for interactive analysis and high-quality graphic generation for scientific publications.
+
+===
 
 ![Frequency Display](images/qo-2.png)
 
 ![Help Screen](images/qo-3.png)
 
-![Light Theme, Supersampled](images/qo-4.png)
+![Themes](images/qo-4.png)
 
-![SVG Export](images/qo-5.svg)
+![SVG Export](images/qo-6.svg)
 
 ## Overview
 
@@ -302,11 +305,26 @@ Edit `config.py` to customize:
 - Graph themes
 - Color schemes (light, dark, sci-fi, matrix, and print themes available)
 
+#### Changing Themes
+
 To change themes, modify the `CURRENT_THEME` variable in `config.py`:
+
 ```python
+# Open config.py in a text editor
+# Find this section near the bottom of the file:
+
 # Options: LIGHT_THEME, DARK_THEME, SCIFI_THEME, MATRIX_THEME, PRINT_THEME
-CURRENT_THEME = LIGHT_THEME  # Change to your preferred theme
+CURRENT_THEME = SCIFI_THEME  # Change to your preferred theme
 ```
+
+Available themes include:
+- `LIGHT_THEME`: White background with black text and bonds (default)
+- `DARK_THEME`: Black background with light gray text and bonds
+- `SCIFI_THEME`: Dark blue-black background with cyan/teal elements
+- `MATRIX_THEME`: Black background with green elements (cyberpunk style)
+- `PRINT_THEME`: Optimized for publication/printing with white background and high contrast
+
+After changing the theme, restart quickORTEP for the changes to take effect.
 
 ## Exporting Data
 
