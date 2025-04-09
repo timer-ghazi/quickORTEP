@@ -1,6 +1,8 @@
 # window.py
 
 import sys
+import os
+import platform
 from Xlib import X, XK, display
 
 # Import your two canvas implementations
@@ -24,6 +26,15 @@ class X11Window:
         :param canvas_class: A subclass of X11CanvasBase to use for drawing
         :param background_color: RGB tuple for the background color (default: white)
         """
+
+        # Fix for macOS XQuartz DISPLAY format
+        if platform.system() == "Darwin":  # Check if running on macOS
+            # If DISPLAY looks like a file path and ends with ":0", fix it
+            display_var = os.environ.get("DISPLAY", "")
+            if display_var.startswith("/") and display_var.endswith(":0"):
+                os.environ["DISPLAY"] = ":0"
+                print("Detected macOS XQuartz socket path. Setting DISPLAY=:0")
+
         self.display = display.Display()
         self.screen = self.display.screen()
         self.running = True
@@ -225,6 +236,8 @@ def create_x11_window(width=800,
     :param background_color: RGB tuple for the background color (default: white)
     :return:          An X11Window with the selected canvas
     """
+
+
     if ss_factor <= 1:
         return X11Window(width, height, title, 
                          canvas_class=X11CanvasBasic,
