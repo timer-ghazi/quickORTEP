@@ -453,12 +453,11 @@ def build_default_graphs(window, xdata, ydata, current_frame):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python graph_viewer.py <xyz_file> [current_frame] [ss_factor]")
+        print("Usage: python graph_viewer.py <xyz_file> [current_frame]")
         sys.exit(1)
 
     xyz_file = sys.argv[1]
     current_frame = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-    ss_factor = int(sys.argv[3]) if len(sys.argv) > 3 else 1
 
     traj = Trajectory.from_xyz_file(xyz_file)
     n_frames = len(traj._raw_frames)
@@ -469,7 +468,7 @@ if __name__ == "__main__":
         mol = traj.get_frame(i)
         y_values.append(mol.Energy if mol.Energy is not None else 0.0)
 
-    win = create_x11_window(width=800, height=600, title="Graph Viewer", ss_factor=ss_factor)
+    win = create_x11_window(width=800, height=600, title="Graph Viewer")
 
     # Build two graphs (main + thumbnail)
     main_graph, thumbnail_graph = build_default_graphs(win, x_values, y_values, current_frame)

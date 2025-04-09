@@ -5,9 +5,8 @@ import os
 import platform
 from Xlib import X, XK, display
 
-# Import your two canvas implementations
+# Import canvas implementation
 from .x11_basic import X11CanvasBasic
-from .x11_ss import X11CanvasSS
 
 
 class X11Window:
@@ -18,12 +17,11 @@ class X11Window:
     """
 
     def __init__(self, width=800, height=600, title="X11 Demo", 
-                 canvas_class=X11CanvasBasic, background_color=(255, 255, 255)):
+                 background_color=(255, 255, 255)):
         """
         :param width:        Initial window width (pixels)
         :param height:       Initial window height (pixels)
         :param title:        Window title
-        :param canvas_class: A subclass of X11CanvasBase to use for drawing
         :param background_color: RGB tuple for the background color (default: white)
         """
 
@@ -63,16 +61,8 @@ class X11Window:
         self.window.set_wm_name(title)
         self.window.map()
 
-        # Instantiate the chosen canvas with background color
-        if callable(canvas_class) and canvas_class != X11CanvasBasic and canvas_class != X11CanvasSS:
-            # It's likely a factory function, pass it the window
-            self.canvas = canvas_class(self)
-            # If the canvas supports setting background color, update it
-            if hasattr(self.canvas, 'set_background_color'):
-                self.canvas.set_background_color(background_color)
-        else:
-            # Direct instantiation with background color
-            self.canvas = canvas_class(self, background_color=background_color)
+        # Instantiate the canvas with background color
+        self.canvas = X11CanvasBasic(self, background_color=background_color)
 
 
     def run(self):
@@ -220,59 +210,26 @@ class X11Window:
 def create_x11_window(width=800,
                       height=600,
                       title="X11 Demo",
-                      ss_factor=1,
-                      tile_size=128,
                       background_color=(255, 255, 255)):
     """
     A factory function that returns an X11Window instance.
-    If ss_factor <= 1, we use the basic canvas class.
-    If ss_factor > 1, we use the supersampled canvas class.
     
     :param width:     Window width in pixels
     :param height:    Window height in pixels
     :param title:     Window title
-    :param ss_factor: Supersampling factor (1 -> no SS, 2 -> 2x, etc.)
-    :param tile_size: Tile size in pixels for partial put_image (only used by the SS canvas)
     :param background_color: RGB tuple for the background color (default: white)
-    :return:          An X11Window with the selected canvas
+    :return:          An X11Window with the basic canvas
     """
 
-
-    if ss_factor <= 1:
-        return X11Window(width, height, title, 
-                         canvas_class=X11CanvasBasic,
-                         background_color=background_color)
-    else:
-        # We'll define a small factory (closure) to pass ss_factor & tile_size
-        def ss_canvas_factory(x11_window):
-            return X11CanvasSS(
-                x11_window,
-                ss_factor=ss_factor,
-                tile_size=tile_size,
-                background_color=background_color
-            )
-        return X11Window(width, height, title, 
-                         canvas_class=ss_canvas_factory,
-                         background_color=background_color)
+    return X11Window(width, height, title, background_color=background_color)
 
 
 if __name__ == "__main__":
     """
-    Simple test harness. Let users run 'python -m x11view.window [ss_factor]'
-    to test basic or SS mode. Example:
-      python -m x11view.window 1     -> Basic
-      python -m x11view.window 2     -> 2x Supersampling
+    Simple test harness. Run 'python -m x11view.window' to test the basic canvas.
     """
     import sys
 
-    if len(sys.argv) > 1:
-        try:
-            sf = int(sys.argv[1])
-        except ValueError:
-            sf = 1
-    else:
-        sf = 1
-
-    print(f"Creating window with ss_factor={sf}")
-    win = create_x11_window(width=800, height=600, title="Canvas Test", ss_factor=sf)
+    print("Creating window with basic canvas")
+    win = create_x11_window(width=800, height=600, title="Canvas Test")
     win.run()

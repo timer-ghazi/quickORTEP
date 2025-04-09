@@ -16,7 +16,7 @@ import time
 import math
 import numpy as np
 from Xlib import XK, X
-from x11view.window import X11Window, X11CanvasBasic, X11CanvasSS
+from x11view.window import X11Window, X11CanvasBasic
 from hud import HUDPanel
 from ortep_renderer import ORTEP_MoleculeRenderer
 from config import CANVAS_SETTINGS, VIEWER_INTERACTION, MINIMAL_THEME
@@ -871,16 +871,8 @@ class MoleculeViewer(X11Window):
     A viewer for ORTEP-style molecule visualization with support for interactive
     bond editing, frame navigation, normal mode visualization, and more.
     """
-    def __init__(self, ortep_molecule, width=800, height=600,
-                 ss_factor=1, tile_size=128):
+    def __init__(self, ortep_molecule, width=800, height=600):
         # --- Initialize Window and Canvas ---
-        # Select the appropriate canvas class
-        if ss_factor <= 1:
-            canvas_class = X11CanvasBasic
-        else:
-            canvas_class = lambda w: X11CanvasSS(w, ss_factor=ss_factor,
-                                                 tile_size=tile_size)
-        
         # Get background color from theme settings
         background_color = CANVAS_SETTINGS["background_color"]
         
@@ -888,7 +880,6 @@ class MoleculeViewer(X11Window):
             width=width,
             height=height,
             title="quickORTEP",
-            canvas_class=canvas_class,
             background_color=background_color
         )
         

@@ -3,21 +3,17 @@
 test_shapes.py
 
 A dedicated test script that showcases a variety of shapes and angles
-to visually inspect anti-aliasing. First, it opens a window with the
-basic (non-SS) canvas. When that window is closed, it opens another
-window with the supersampled (SS) canvas.
+in a basic canvas window. After the window is closed, it also saves an 
+SVG file ("test_shapes_export.svg") that contains the same shapes, 
+drawn with our SVGCanvas backend.
 
-After both windows are closed, it also saves an SVG file ("test_shapes_export.svg")
-that contains the same shapes, drawn with our SVGCanvas backend.
-
-Press 'q' or 'Escape' in either window to close it.
+Press 'q' or 'Escape' to close the window.
 """
 
 import math
 
 from x11view.window import X11Window
 from x11view.x11_basic import X11CanvasBasic
-from x11view.x11_ss import X11CanvasSS
 
 # Import our SVGCanvas
 from x11view.svg_canvas import SVGCanvas
@@ -114,30 +110,16 @@ class ShapeTestWindow(X11Window):
 
 def main():
     """
-    Run a two-phase test:
+    Run a simple test:
       1) Show the shapes in a window with Basic canvas.
-      2) After it's closed, show the shapes in a window with SS canvas
-         and an artificially large tile_size to test clamping.
-
-    After both windows are closed, we also export an SVG file with the
-    same shapes for offline inspection.
+      2) After it's closed, export an SVG file with the same shapes for offline inspection.
     """
-    # 1) Basic (non-SS) version
-    print("Opening Basic (non-SS) window...")
-    basic_win = ShapeTestWindow(width=800, height=600, title="Shape Test - Basic",
-                                canvas_class=X11CanvasBasic)
+    # 1) Basic window
+    print("Opening Basic window...")
+    basic_win = ShapeTestWindow(width=800, height=600, title="Shape Test")
     basic_win.run()  # Blocks until user closes or hits 'q'
 
-    # 2) SS version with an over-the-top tile_size to test clamping
-    print("Opening SS window (factor=2) with very large tile_size=99999 ...")
-    def ss_factory(x11_window):
-        return X11CanvasSS(x11_window, ss_factor=2, tile_size=99999)
-
-    ss_win = ShapeTestWindow(width=800, height=600, title="Shape Test - SS",
-                             canvas_class=ss_factory)
-    ss_win.run()
-
-    # 3) Generate an SVG version of the same shapes
+    # 2) Generate an SVG version of the same shapes
     print("Now saving an SVG version of the same shapes to 'test_shapes_export.svg' ...")
     svg_canvas = SVGCanvas(width=800, height=600)
     draw_test_shapes(svg_canvas, 800, 600)

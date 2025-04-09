@@ -3,7 +3,7 @@
 quickORTEP.py
 
 Usage:
-  python quickORTEP.py <xyz_file> [ss_factor=1] [tile_size=128]
+  python quickORTEP.py <xyz_file>
 
 This replicates the old ortep-view-v2.py behavior using the refactored architecture,
 which now includes a multi-line HUD for displaying interactive information and trajectory navigation.
@@ -21,14 +21,10 @@ from config import DEFAULT_ENERGY_UNIT, ENERGY_UNITS
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: quickORTEP.py <xyz_file> [ss_factor=1] [tile_size=128]")
+        print("Usage: quickORTEP.py <xyz_file>")
         sys.exit(1)
 
     xyz_file = sys.argv[1]
-    # Default to no anti-aliasing => ss_factor=1
-    ss_factor = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    # Default tile_size = 128
-    tile_size = int(sys.argv[3]) if len(sys.argv) > 3 else 1000
 
     # --- Load the full trajectory ---
     traj = Trajectory.from_xyz_file(xyz_file)
@@ -63,12 +59,9 @@ def main():
         n_ncis += 1
 
     # --- Launch the viewer with trajectory support ---
-    viewer = MoleculeViewer(ortep_mol, width=700, height=700,
-                              ss_factor=ss_factor, tile_size=tile_size)
+    viewer = MoleculeViewer(ortep_mol, width=700, height=700)
     
     # Pass the trajectory to the viewer using the proper method
-#     viewer.set_trajectory(traj)
-#     viewer.current_frame = 0  # This might be redundant now since set_trajectory sets total_frames
     viewer.set_trajectory(traj)
     
     # Set the initial frame based on file type
@@ -126,9 +119,7 @@ def main():
                 f"Energy range{method_info}: {min_e:.4f} (frame {min_idx}) to {max_e:.4f} {unit_symbol}{norm_info}"
             )
     
-    # Log rendering settings
-    if ss_factor > 1:
-        viewer.message_service.log_info(f"Anti-aliasing enabled (factor: {ss_factor}, tile size: {tile_size})")
+    # No anti-aliasing message needed since we removed the functionality
 
     viewer.fit_molecule_to_window()  # Adjust zoom and centering so the molecule fits
 
