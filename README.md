@@ -21,7 +21,7 @@ quickORTEP is a Python-based molecular visualization tool inspired by the classi
 
 ## Features
 
-- **Fast X11-based rendering** with optional anti-aliasing (supersampling)
+- **Fast X11-based rendering**
 - **Trajectory support** for visualizing molecular dynamics or reaction paths
 - **Interactive bond editing** that propagates across trajectory frames
 - **Multiple bond types** (covalent, non-covalent interactions, transition state, distance bonds)
@@ -40,7 +40,6 @@ quickORTEP is a Python-based molecular visualization tool inspired by the classi
 - Python 3.9+
 - numpy (≥1.19.0)
 - python-xlib (≥0.31)
-- Pillow (≥8.0.0)
 - X11 display server (native on Linux, XQuartz on macOS)
 
 ### Installation Methods
@@ -140,21 +139,13 @@ python quickORTEP.py molecule.xyz
 ### Starting the Viewer
 
 ```bash
-# Basic usage (recommended)
+# Basic usage
 quickortep molecule.xyz
-
-# With anti-aliasing (2x supersampling) - experimental, significantly slower
-quickortep molecule.xyz 2
-
-# With custom tile size for larger displays
-quickortep molecule.xyz 2 256
 ```
 
 ### Command Line Arguments
 
 - **Argument 1**: Path to molecular structure file (required, XYZ or Gaussian output)
-- **Argument 2**: Supersampling factor for anti-aliasing (optional, default=1, values > 1 enable experimental anti-aliasing which is much slower)
-- **Argument 3**: Tile size for rendering (optional, default=128)
 
 ## User Interface
 
@@ -285,17 +276,6 @@ Press 's' to export the current view as an SVG file, which is useful for creatin
 
 ## Advanced Usage
 
-### Anti-aliasing
-
-For better visual quality, you can use supersampling, though be aware that this feature is experimental and can be significantly slower than the standard rendering mode:
-
-```bash
-quickortep molecule.xyz 2  # 2x supersampling
-quickortep molecule.xyz 4  # 4x supersampling (much slower but higher quality)
-```
-
-Note: The supersampled mode is not generally recommended for regular use due to performance considerations, especially on older hardware or for complex molecules.
-
 ### Customizing Appearance
 
 Edit `config.py` to customize:
@@ -360,7 +340,7 @@ The project is organized into several modules:
 - **molecule.py/molecule_nci.py**: Molecule representation and non-covalent interaction detection
 - **trajectory.py**: Trajectory handling for multi-frame visualizations
 - **normal_modes.py**: Vibrational mode analysis
-- **x11view/**: X11 rendering backends (basic and supersampled)
+- **x11view/**: X11 rendering backends
 - **config.py**: Customization options and themes
 
 ## Acknowledgments
