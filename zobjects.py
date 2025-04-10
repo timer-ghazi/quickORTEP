@@ -151,6 +151,73 @@ class ZAtom(ZObject):
             # Draw the highlight
             canvas.draw_filled_circle(highlight_x, highlight_y, highlight_radius, color=highlight_color)
 
+        # Draw atom label if enabled
+        if ATOM_STYLE.get("label", {}).get("enabled", False) and self.atom is not None:
+            # Get label settings from config or use defaults
+            font_size = ATOM_STYLE.get("label", {}).get("font_size", 12)
+            offset_x = ATOM_STYLE.get("label", {}).get("offset_x", -8)
+            offset_y = ATOM_STYLE.get("label", {}).get("offset_y", -8)
+            background = ATOM_STYLE.get("label", {}).get("background", True)
+            background_color = ATOM_STYLE.get("label", {}).get("background_color", (0, 0, 0, 180))
+            show_symbols = ATOM_STYLE.get("label", {}).get("show_symbols", False)
+            padding = ATOM_STYLE.get("label", {}).get("padding", 2)
+            
+            # Get current zoom level for scaling offsets
+            zoom_ratio = current_zoom / 100.0
+            scaled_offset_x = int(offset_x * zoom_ratio)
+            scaled_offset_y = int(offset_y * zoom_ratio)
+            
+            # Calculate label position (top-left quadrant by default)
+            label_x = self.x2d + scaled_offset_x
+            label_y = self.y2d + scaled_offset_y
+            
+            # Create label text
+            if show_symbols and hasattr(self.atom, 'symbol'):
+                label_text = f"{self.atom.symbol}{self.atom.index}"
+            else:
+                label_text = f"{self.atom.index}"
+            
+            # Get label color - use provided color or atom color adjusted for visibility
+            label_color = ATOM_STYLE.get("label", {}).get("color", None)
+            if label_color is None:
+                from config import CURRENT_THEME
+                label_color = CURRENT_THEME.get("default_text_color", (255, 255, 255))
+            
+            # Apply fog to label color if color_override is provided
+            if color_override is not None:
+                # Blend original label color (70%) with fog color (30%)
+                r1, g1, b1 = label_color
+                r2, g2, b2 = color_override
+                label_color = (
+                    int(0.7 * r1 + 0.3 * r2),
+                    int(0.7 * g1 + 0.3 * g2),
+                    int(0.7 * b1 + 0.3 * b2)
+                )
+            
+            # Draw label background if enabled
+            if background:
+                # Get text dimensions to calculate background size
+                text_width, text_height = canvas.get_text_dimensions(label_text, font_size)
+                bg_x = label_x - padding
+                bg_y = label_y - text_height - padding
+                bg_width = text_width + 2 * padding
+                bg_height = text_height + 2 * padding
+                
+                # Handle RGBA colors (for SVG) vs RGB colors (for X11)
+                # Convert (r, g, b, a) to (r, g, b) if needed
+                if len(background_color) == 4:
+                    r, g, b, a = background_color
+                    # For X11, just use the RGB components
+                    bg_color = (r, g, b)
+                else:
+                    bg_color = background_color
+                
+                # Draw background rectangle
+                canvas.draw_filled_rect(bg_x, bg_y, bg_width, bg_height, color=bg_color)
+            
+            # Draw label text
+            canvas.draw_text(label_x, label_y, label_text, color=label_color, font_size=font_size)
+
         # Draw highlight if the atom is selected.
         if self.selected:
             # The extra border offset (+4) remains hard-coded; adjust if needed later.

@@ -75,7 +75,8 @@ class XYZTrajectoryParser(TrajectoryParser):
     def can_parse(cls, file_path):
         """Check if file is in XYZ format"""
         # Simple check: file extension and basic structure
-        if not file_path.lower().endswith('.xyz'):
+        allowed_extensions = ('.xyz', '.trj')
+        if not any(file_path.lower().endswith(ext) for ext in allowed_extensions):
             return False
             
         try:

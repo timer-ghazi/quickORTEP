@@ -265,3 +265,19 @@ class X11CanvasBase(ABC):
         :param color: (R, G, B) tuple, each component 0..255
         """
         pass
+        
+    @abstractmethod
+    def get_text_dimensions(self,
+                           text: str,
+                           font_size: int = 12) -> tuple[float, float]:
+        """
+        Estimate the dimensions of the given text in pixels.
+        
+        Parameters:
+            text: The text string to measure
+            font_size: The font size in pixels
+            
+        Returns:
+            (width, height) tuple in pixels
+        """
+        pass

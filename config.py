@@ -330,6 +330,19 @@ ATOM_STYLE = {
         "radius_factor": 1.1,   # Shadow size relative to atom radius
         "darkness": 40          # Shadow color darkness (0-255, lower = darker)
     },
+    
+    # Atom label settings
+    "label": {
+        "enabled": False,        # Toggle atom labels on/off (disabled by default)
+        "font_size": 12,        # Font size for labels
+        "offset_x": -8,         # Horizontal offset from atom center
+        "offset_y": -8,         # Vertical offset from atom center
+        "background": True,     # Enable background for better readability
+        "background_color": (30, 30, 30, 180),  # RGBA background color (semi-transparent black)
+        "show_symbols": False,  # Show atom symbols with numbers
+        "color": None,         # Label text color (None = use current theme text color)
+        "padding": 2           # Padding around text for background
+    },
 }
 
 # ================================

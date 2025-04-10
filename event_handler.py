@@ -105,6 +105,7 @@ class _EventHandler:
             'f': self._toggle_fog_mode,     # Toggle fog mode (OFF/ON)
             '(': self._adjust_fog_density_down,  # Decrease fog density
             ')': self._adjust_fog_density_up,    # Increase fog density
+            '#': self._toggle_atom_labels,   # Toggle atom labels
             
             # Bond operations
             'p': self._toggle_graph_mode,
@@ -463,6 +464,10 @@ class _EventHandler:
     def _toggle_3d_effects(self):
         """Toggle 3D effects (atom highlights and shadows)."""
         self.viewer.toggle_3d_effects()
+        
+    def _toggle_atom_labels(self):
+        """Toggle the display of atom labels."""
+        self.viewer.toggle_atom_labels()
     
     def _toggle_normal_modes(self):
         """Toggle the display of normal mode vectors."""

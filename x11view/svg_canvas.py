@@ -26,8 +26,22 @@ class SVGCanvas:
             self.add_background_rect()
 
     def rgb_to_hex(self, color):
-        """Convert an (R, G, B) tuple to a #RRGGBB string."""
-        return "#{:02x}{:02x}{:02x}".format(*color)
+        """
+        Convert an (R, G, B) or (R, G, B, A) tuple to a hex color string.
+        For RGB tuples, returns #RRGGBB format.
+        For RGBA tuples, returns rgba(R, G, B, A) format with alpha as 0-1 value.
+        """
+        if len(color) == 3:
+            # RGB format
+            return "#{:02x}{:02x}{:02x}".format(*color)
+        elif len(color) == 4:
+            # RGBA format - convert to CSS rgba() format
+            r, g, b, a = color
+            alpha = a / 255.0  # Convert 0-255 to 0-1 range
+            return f"rgba({r},{g},{b},{alpha:.2f})"
+        else:
+            # Fallback for unexpected format
+            return "#000000"
 
     def add_background_rect(self):
         """Add a background rectangle to the SVG with the current background color."""
@@ -149,6 +163,28 @@ class SVGCanvas:
             f'{text}</text>'
         )
         self.svg_data.append(text_elem)
+        
+    def get_text_dimensions(self, text, font_size=12):
+        """
+        Estimate the dimensions of text in pixels.
+        This is an approximation based on DejaVu Sans Mono font metrics.
+        
+        Parameters:
+            text: The text string to measure
+            font_size: The font size in pixels
+            
+        Returns:
+            (width, height) tuple in pixels
+        """
+        # DejaVu Sans Mono is a monospace font, so each character has the same width
+        # For monospaced fonts, width is roughly 0.6 * font_size per character
+        char_width = 0.6 * font_size
+        width = len(text) * char_width
+        
+        # Height is typically around 1.2 * font_size for most fonts
+        height = 1.2 * font_size
+        
+        return (width, height)
 
         
     def draw_rect(self,

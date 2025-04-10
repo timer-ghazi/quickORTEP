@@ -968,6 +968,7 @@ class MoleculeViewer(X11Window):
         self.show_hydrogens = self._view_manager.show_hydrogens
         self.show_axes = self._view_manager.show_axes
         self.show_help = self._view_manager.show_help
+        self.show_atom_labels = False  # Atom labels off by default
         
         # Fog effect settings (initialized from FOG_STYLE in config)
         from config import FOG_STYLE
@@ -1110,6 +1111,10 @@ class MoleculeViewer(X11Window):
         # Update view_params with current fog settings before rendering
         self.view_params.fog_mode = self.fog_mode
         self.view_params.fog_current_density = self.fog_current_density
+        
+        # Update atom label configuration from viewer state
+        from config import ATOM_STYLE
+        ATOM_STYLE["label"]["enabled"] = self.show_atom_labels
     
         # Draw the main molecule (atoms, bonds, vectors)
         self.renderer.draw_molecule(self.canvas, self.ortep_mol, self.view_params)
@@ -1209,6 +1214,7 @@ class MoleculeViewer(X11Window):
         display_options = []
         display_options.append("H" if self.show_hydrogens else "no H")
         display_options.append("axes" if self.show_axes else "no axes")
+        display_options.append("labels" if self.show_atom_labels else "no labels")
         
         # Add 3D effects status
         from config import ATOM_STYLE
@@ -1274,6 +1280,13 @@ class MoleculeViewer(X11Window):
     def toggle_3d_effects(self):
         """Toggle 3D effects (atom highlights and shadows)."""
         self._view_manager.toggle_3d_effects()
+        
+    def toggle_atom_labels(self):
+        """Toggle the display of atom labels."""
+        self.show_atom_labels = not self.show_atom_labels
+        status = "enabled" if self.show_atom_labels else "disabled"
+        self.message_service.log_info(f"Atom labels {status}")
+        self.redraw()
 
     def clear_bond_edits(self):
         """Clear all bond edits and refresh the current frame."""

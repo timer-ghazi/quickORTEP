@@ -19,6 +19,7 @@ HELP_TEXT = [
     "",
     "DISPLAY OPTIONS",
     "  Atom Display:        d => toggle hydrogens     3 => toggle 3D effects",
+    "                       # => toggle atom labels",
     "  References:          g => toggle grid          a => toggle axes",
     "  Fog Effects:         f => toggle fog           ( / ) => adjust fog density",
     "",

@@ -419,3 +419,27 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
     
         # Draw the text (will use whatever font we successfully set, or X11's default)
         self.pixmap.draw_text(gc, x, y, text)
+        
+    def get_text_dimensions(self, text, font_size=12):
+        """
+        Estimate the dimensions of text in pixels.
+        In X11 mode, this is an approximation as we don't query the actual font metrics.
+        
+        Parameters:
+            text: The text string to measure
+            font_size: The font size (not directly used in X11 core fonts)
+            
+        Returns:
+            (width, height) tuple in pixels
+        """
+        # For X11 core fonts, we don't have direct access to font metrics in the Python binding
+        # Instead, we'll use a simple approximation based on typical fixed-width fonts
+        
+        # For our default fonts, approximate character width (most are fixed-width)
+        char_width = 8  # Default estimate for a typical fixed-width X11 font
+        width = len(text) * char_width
+        
+        # Height is typically the font size or slightly larger
+        height = 13  # Typical height for misc-fixed fonts
+        
+        return (width, height)
