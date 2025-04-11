@@ -53,7 +53,7 @@ conda activate quickortep
 
 # Install dependencies
 conda install numpy
-conda install -c conda-forge python-xlib pillow
+conda install -c conda-forge python-xlib 
 
 # Install quickORTEP (from the project directory)
 pip install .
@@ -87,7 +87,7 @@ git clone https://github.com/yourusername/quickORTEP.git
 cd quickORTEP
 
 # Install dependencies
-pip install numpy python-xlib pillow
+pip install numpy python-xlib 
 
 # Run directly
 python quickORTEP.py molecule.xyz
