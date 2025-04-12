@@ -58,8 +58,11 @@ def main():
         ortep_mol.add_bond(nci_bond)
         n_ncis += 1
 
+    filename = os.path.basename(xyz_file)
+    window_title = filename
+
     # --- Launch the viewer with trajectory support ---
-    viewer = MoleculeViewer(ortep_mol, width=700, height=700)
+    viewer = MoleculeViewer(ortep_mol, width=700, height=700, title=window_title)
     
     # Pass the trajectory to the viewer using the proper method
     viewer.set_trajectory(traj)
@@ -75,7 +78,6 @@ def main():
         viewer.set_frame(viewer.current_frame)
     
     # Log molecule and trajectory information
-    filename = os.path.basename(xyz_file)
     viewer.message_service.log_info(f"Loaded {filename} with {n_atoms} atoms")
     viewer.message_service.log_info(f"Found {n_bonds} covalent bonds and {n_ncis} non-covalent interactions")
     

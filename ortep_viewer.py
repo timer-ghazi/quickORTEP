@@ -871,15 +871,19 @@ class MoleculeViewer(X11Window):
     A viewer for ORTEP-style molecule visualization with support for interactive
     bond editing, frame navigation, normal mode visualization, and more.
     """
-    def __init__(self, ortep_molecule, width=800, height=600):
+    def __init__(self, ortep_molecule, width=800, height=600, title=None):
         # --- Initialize Window and Canvas ---
         # Get background color from theme settings
         background_color = CANVAS_SETTINGS["background_color"]
+
+        # Use "quickORTEP" as a fallback if no title is provided
+        if title is None:
+            title = "quickORTEP"
         
         super().__init__(
             width=width,
             height=height,
-            title="quickORTEP",
+            title=title,
             background_color=background_color
         )
         
