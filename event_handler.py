@@ -352,6 +352,8 @@ class _EventHandler:
                             # Clear selection if no valid object was clicked
                             self._clear_all_selections()
                     
+                    # Update geometric selection state based on current bond selection
+                    self.viewer._update_geometric_selection_state()
                     self.viewer.redraw()
             
             # Reset state
@@ -491,7 +493,7 @@ class _EventHandler:
         self.viewer.adjust_normal_mode_scale(0.8)  # Decrease by 20%
     
     def _toggle_graph_mode(self):
-        """Toggle the graph mode between energy and bond length."""
+        """Toggle the graph mode between energy, bond length, angle, and dihedral."""
         self.viewer.toggle_graph_mode()
     
     def _toggle_bond_propagation(self):

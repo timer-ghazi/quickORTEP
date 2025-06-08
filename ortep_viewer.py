@@ -261,8 +261,10 @@ class _GraphManager:
     def __init__(self, viewer):
         self.viewer = viewer
         self.energy_graph = None
-        self.graph_mode = "energy"  # Options: "energy", "bond_length"
+        self.graph_mode = "energy"  # Options: "energy", "bond_length", "angle", "dihedral"
         self.selected_bond_for_graph = None  # Will store the bond ID (atom1_idx, atom2_idx)
+        self.active_angle_for_graph = None  # Will store angle indices (i, j, k)
+        self.active_dihedral_for_graph = None  # Will store dihedral indices (i, j, k, l)
 
     def ensure_energy_graph(self):
         """Initialize or update the graph based on the current mode (energy or bond length)."""
@@ -304,7 +306,7 @@ class _GraphManager:
             y_values = [e if not np.isnan(e) else 0.0 for e in energies]
             title = "Energy"
             y_axis_title = ""
-        else:
+        elif self.graph_mode == "bond_length":
             # Bond length graph
             atom1_idx, atom2_idx = self.selected_bond_for_graph
             atom1 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom1_idx), None)
@@ -319,6 +321,71 @@ class _GraphManager:
             else:
                 title = "Bond Length"
             y_axis_title = ""
+        elif self.graph_mode == "angle":
+            # Angle graph
+            if self.viewer.trajectory is None:
+                return
+                
+            i, j, k = self.active_angle_for_graph
+            
+            # Get angle trajectory data (convert to 0-based indices for trajectory method)
+            angles = self.viewer.trajectory.angle_trajectory(i-1, j-1, k-1, degrees=True)
+            
+            # Check if coordinate or time metadata is available for the x-axis
+            coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
+            if coord_info.get('field') is not None and len(coords) == len(angles):
+                x_values = list(coords)
+                x_axis_title = "Coord" if coord_info['field'] == "coord" else "Time"
+            else:
+                x_values = list(range(len(angles)))
+                x_axis_title = "Frame"
+                
+            y_values = list(angles)
+            
+            # Prepare title with atom symbols
+            atom_i = next((a for a in self.viewer.ortep_mol.atoms if a.index == i), None)
+            atom_j = next((a for a in self.viewer.ortep_mol.atoms if a.index == j), None)
+            atom_k = next((a for a in self.viewer.ortep_mol.atoms if a.index == k), None)
+            if atom_i and atom_j and atom_k:
+                title = f"{atom_i.symbol}{i}-{atom_j.symbol}{j}-{atom_k.symbol}{k}"
+            else:
+                title = f"{i}-{j}-{k}"
+            y_axis_title = "Angle (deg)"
+        elif self.graph_mode == "dihedral":
+            # Dihedral graph
+            if self.viewer.trajectory is None:
+                return
+                
+            i, j, k, l = self.active_dihedral_for_graph
+            
+            # Get dihedral trajectory data (convert to 0-based indices for trajectory method)
+            dihedrals = self.viewer.trajectory.dihedral_trajectory(i-1, j-1, k-1, l-1, degrees=True)
+            
+            # Check if coordinate or time metadata is available for the x-axis
+            coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)
+            if coord_info.get('field') is not None and len(coords) == len(dihedrals):
+                x_values = list(coords)
+                x_axis_title = "Coord" if coord_info['field'] == "coord" else "Time"
+            else:
+                x_values = list(range(len(dihedrals)))
+                x_axis_title = "Frame"
+                
+            y_values = list(dihedrals)
+            
+            # Prepare title with atom symbols
+            atom_i = next((a for a in self.viewer.ortep_mol.atoms if a.index == i), None)
+            atom_j = next((a for a in self.viewer.ortep_mol.atoms if a.index == j), None)
+            atom_k = next((a for a in self.viewer.ortep_mol.atoms if a.index == k), None)
+            atom_l = next((a for a in self.viewer.ortep_mol.atoms if a.index == l), None)
+            if atom_i and atom_j and atom_k and atom_l:
+                title = f"{atom_i.symbol}{i}-{atom_j.symbol}{j}-{atom_k.symbol}{k}-{atom_l.symbol}{l}"
+            else:
+                title = f"{i}-{j}-{k}-{l}"
+            y_axis_title = "Dihedral (deg)"
+        else:
+            # Fallback to energy mode if mode is not recognized
+            self.graph_mode = "energy"
+            return self.ensure_energy_graph()
     
         # Create a custom minimal theme
         custom_minimal_theme = MINIMAL_THEME.copy()
@@ -537,8 +604,42 @@ class _GraphManager:
         
 
     def toggle_graph_mode(self):
-        """Toggle between energy and bond length visualization modes."""
-        if self.viewer.selected_bonds and len(self.viewer.selected_bonds) == 1:
+        """Toggle between energy, bond length, angle, and dihedral visualization modes."""
+        # Check for active angle or dihedral first
+        if self.viewer.active_angle is not None:
+            if self.graph_mode == "energy":
+                # Switch to angle mode
+                self.graph_mode = "angle"
+                self.active_angle_for_graph = self.viewer.active_angle
+                i, j, k = self.viewer.active_angle
+                self.viewer.message_service.log_info(f"Showing angle plot for {i}-{j}-{k}")
+            else:
+                # Switch back to energy mode
+                self.graph_mode = "energy"
+                self.viewer.message_service.log_info("Showing energy plot")
+            
+            # Refresh the graph
+            self.energy_graph = None  # Force recreation
+            self.ensure_energy_graph()
+            
+        elif self.viewer.active_dihedral is not None:
+            if self.graph_mode == "energy":
+                # Switch to dihedral mode
+                self.graph_mode = "dihedral"
+                self.active_dihedral_for_graph = self.viewer.active_dihedral
+                i, j, k, l = self.viewer.active_dihedral
+                self.viewer.message_service.log_info(f"Showing dihedral plot for {i}-{j}-{k}-{l}")
+            else:
+                # Switch back to energy mode
+                self.graph_mode = "energy"
+                self.viewer.message_service.log_info("Showing energy plot")
+            
+            # Refresh the graph
+            self.energy_graph = None  # Force recreation
+            self.ensure_energy_graph()
+            
+        elif self.viewer.selected_bonds and len(self.viewer.selected_bonds) == 1:
+            # Existing bond length logic
             bond = self.viewer.selected_bonds[0]
             atom1_idx = bond.atom1.index
             atom2_idx = bond.atom2.index
@@ -558,14 +659,15 @@ class _GraphManager:
             # Refresh the graph
             self.energy_graph = None  # Force recreation
             self.ensure_energy_graph()
-        elif self.graph_mode == "bond_length":
-            # Switch back to energy mode if in bond length mode but no bond selected
+            
+        elif self.graph_mode in ["bond_length", "angle", "dihedral"]:
+            # Switch back to energy mode if in any other mode but no relevant selection
             self.graph_mode = "energy"
             self.viewer.message_service.log_info("Showing energy plot")
             self.energy_graph = None  # Force recreation
             self.ensure_energy_graph()
         else:
-            self.viewer.message_service.log_info("Select a bond first to toggle length graph")
+            self.viewer.message_service.log_info("Select bonds to create angle/dihedral or single bond for length plot")
 
     def update_info_message(self, lines):
         """Add graph information to the HUD lines."""
@@ -575,6 +677,25 @@ class _GraphManager:
             atom2 = next((a for a in self.viewer.ortep_mol.atoms if a.index == atom2_idx), None)
             if atom1 and atom2:
                 lines.append(f"Graph: Bond length {atom1.symbol}{atom1_idx}-{atom2.symbol}{atom2_idx}")
+        elif self.graph_mode == "angle" and self.active_angle_for_graph:
+            i, j, k = self.active_angle_for_graph
+            atom_i = next((a for a in self.viewer.ortep_mol.atoms if a.index == i), None)
+            atom_j = next((a for a in self.viewer.ortep_mol.atoms if a.index == j), None)
+            atom_k = next((a for a in self.viewer.ortep_mol.atoms if a.index == k), None)
+            if atom_i and atom_j and atom_k:
+                lines.append(f"Graph: Angle {atom_i.symbol}{i}-{atom_j.symbol}{j}-{atom_k.symbol}{k}")
+            else:
+                lines.append(f"Graph: Angle {i}-{j}-{k}")
+        elif self.graph_mode == "dihedral" and self.active_dihedral_for_graph:
+            i, j, k, l = self.active_dihedral_for_graph
+            atom_i = next((a for a in self.viewer.ortep_mol.atoms if a.index == i), None)
+            atom_j = next((a for a in self.viewer.ortep_mol.atoms if a.index == j), None)
+            atom_k = next((a for a in self.viewer.ortep_mol.atoms if a.index == k), None)
+            atom_l = next((a for a in self.viewer.ortep_mol.atoms if a.index == l), None)
+            if atom_i and atom_j and atom_k and atom_l:
+                lines.append(f"Graph: Dihedral {atom_i.symbol}{i}-{atom_j.symbol}{j}-{atom_k.symbol}{k}-{atom_l.symbol}{l}")
+            else:
+                lines.append(f"Graph: Dihedral {i}-{j}-{k}-{l}")
         else:
             # Add unit info to the graph description
             if self.viewer.trajectory:
@@ -982,6 +1103,10 @@ class MoleculeViewer(X11Window):
         # Expose graph properties for compatibility with event_handler
         self.energy_graph = None  # This will be updated when _graph_manager creates it
         self.graph_mode = "energy"  # Initialize to match _graph_manager
+        
+        # Geometric selection state
+        self.active_angle = None
+        self.active_dihedral = None
 
     # --- Public API Methods ---
 
@@ -1099,6 +1224,95 @@ class MoleculeViewer(X11Window):
             else:
                 bond.selected = False
 
+    def _update_geometric_selection_state(self):
+        """
+        Analyze the current bond selection and update active angle/dihedral state.
+        
+        This method examines the selected bonds to identify if they form a valid
+        angle (2 bonds sharing a common atom) or dihedral (3 bonds in sequence).
+        """
+        # Reset geometric selection state
+        self.active_angle = None
+        self.active_dihedral = None
+        
+        if len(self.selected_bonds) == 2:
+            # Check if two bonds share a common atom (angle)
+            bond1, bond2 = self.selected_bonds
+            
+            # Find common atom between the two bonds
+            common_atom = None
+            atom1, atom2 = None, None
+            
+            if bond1.atom1.index == bond2.atom1.index:
+                common_atom = bond1.atom1
+                atom1 = bond1.atom2
+                atom2 = bond2.atom2
+            elif bond1.atom1.index == bond2.atom2.index:
+                common_atom = bond1.atom1
+                atom1 = bond1.atom2
+                atom2 = bond2.atom1
+            elif bond1.atom2.index == bond2.atom1.index:
+                common_atom = bond1.atom2
+                atom1 = bond1.atom1
+                atom2 = bond2.atom2
+            elif bond1.atom2.index == bond2.atom2.index:
+                common_atom = bond1.atom2
+                atom1 = bond1.atom1
+                atom2 = bond2.atom1
+            
+            if common_atom is not None:
+                # Set active angle (using 1-based indices)
+                self.active_angle = (atom1.index, common_atom.index, atom2.index)
+                
+        elif len(self.selected_bonds) == 3:
+            # Check if three bonds form a valid A-B-C-D dihedral sequence
+            bonds = self.selected_bonds
+            
+            # Try all permutations to find a valid sequence
+            import itertools
+            for perm in itertools.permutations(bonds):
+                bond1, bond2, bond3 = perm
+                
+                # Check if bonds form A-B-C-D sequence
+                # bond1: A-B, bond2: B-C, bond3: C-D
+                if (bond1.atom2.index == bond2.atom1.index and 
+                    bond2.atom2.index == bond3.atom1.index):
+                    # Found A-B-C-D sequence
+                    A = bond1.atom1
+                    B = bond1.atom2  # Same as bond2.atom1
+                    C = bond2.atom2  # Same as bond3.atom1
+                    D = bond3.atom2
+                    self.active_dihedral = (A.index, B.index, C.index, D.index)
+                    break
+                elif (bond1.atom1.index == bond2.atom2.index and
+                      bond2.atom1.index == bond3.atom2.index):
+                    # Found D-C-B-A sequence (reverse)
+                    D = bond1.atom2
+                    C = bond1.atom1  # Same as bond2.atom2
+                    B = bond2.atom1  # Same as bond3.atom2
+                    A = bond3.atom1
+                    self.active_dihedral = (A.index, B.index, C.index, D.index)
+                    break
+                # Additional checks for other connection patterns
+                elif (bond1.atom2.index == bond2.atom2.index and
+                      bond2.atom1.index == bond3.atom1.index):
+                    # A-B, C-B, C-D sequence
+                    A = bond1.atom1
+                    B = bond1.atom2  # Same as bond2.atom2
+                    C = bond2.atom1  # Same as bond3.atom1
+                    D = bond3.atom2
+                    self.active_dihedral = (A.index, B.index, C.index, D.index)
+                    break
+                elif (bond1.atom1.index == bond2.atom1.index and
+                      bond2.atom2.index == bond3.atom2.index):
+                    # B-A, B-C, D-C sequence
+                    A = bond1.atom2
+                    B = bond1.atom1  # Same as bond2.atom1
+                    C = bond2.atom2  # Same as bond3.atom2
+                    D = bond3.atom1
+                    self.active_dihedral = (A.index, B.index, C.index, D.index)
+                    break
+
     def redraw(self):
         """
         Redraw the entire scene, including the molecule, grid, graph, and UI components.
@@ -1153,7 +1367,48 @@ class MoleculeViewer(X11Window):
     def update_info_message(self):
         """Update the HUD with current info about selection, frame, energy, etc."""
         lines = []
-        if self.selected_bonds:
+        
+        # Check for active angle or dihedral first
+        if self.active_angle is not None:
+            # Calculate and display angle
+            i, j, k = self.active_angle
+            mol = self.trajectory.get_frame(self.current_frame) if self.trajectory else None
+            if mol:
+                try:
+                    angle_value = mol.angle(i-1, j-1, k-1, degrees=True)  # Convert to 0-based indices
+                    atom_j = next((a for a in self.ortep_mol.atoms if a.index == j), None)
+                    atom_i = next((a for a in self.ortep_mol.atoms if a.index == i), None)
+                    atom_k = next((a for a in self.ortep_mol.atoms if a.index == k), None)
+                    if atom_i and atom_j and atom_k:
+                        lines.append(f"Angle: {atom_i.symbol}{i}-{atom_j.symbol}{j}-{atom_k.symbol}{k} | {angle_value:.1f}°")
+                    else:
+                        lines.append(f"Angle: {i}-{j}-{k} | {angle_value:.1f}°")
+                    lines.append("Press 'p' to toggle angle plot")
+                except Exception as e:
+                    lines.append(f"Angle: {i}-{j}-{k} | Error calculating")
+            else:
+                lines.append(f"Angle: {i}-{j}-{k} | No trajectory data")
+        elif self.active_dihedral is not None:
+            # Calculate and display dihedral
+            i, j, k, l = self.active_dihedral
+            mol = self.trajectory.get_frame(self.current_frame) if self.trajectory else None
+            if mol:
+                try:
+                    dihedral_value = mol.dihedral(i-1, j-1, k-1, l-1, degrees=True)  # Convert to 0-based indices
+                    atom_i = next((a for a in self.ortep_mol.atoms if a.index == i), None)
+                    atom_j = next((a for a in self.ortep_mol.atoms if a.index == j), None)
+                    atom_k = next((a for a in self.ortep_mol.atoms if a.index == k), None)
+                    atom_l = next((a for a in self.ortep_mol.atoms if a.index == l), None)
+                    if atom_i and atom_j and atom_k and atom_l:
+                        lines.append(f"Dihedral: {atom_i.symbol}{i}-{atom_j.symbol}{j}-{atom_k.symbol}{k}-{atom_l.symbol}{l} | {dihedral_value:.1f}°")
+                    else:
+                        lines.append(f"Dihedral: {i}-{j}-{k}-{l} | {dihedral_value:.1f}°")
+                    lines.append("Press 'p' to toggle dihedral plot")
+                except Exception as e:
+                    lines.append(f"Dihedral: {i}-{j}-{k}-{l} | Error calculating")
+            else:
+                lines.append(f"Dihedral: {i}-{j}-{k}-{l} | No trajectory data")
+        elif self.selected_bonds:
             b = self.selected_bonds[0]
             bond_type = type(b).__name__.replace("Bond", "")
             from bond_manager import NON_REMOVAL_BOND_CYCLE, get_next_bond_type
