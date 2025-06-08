@@ -1,7 +1,7 @@
 
 # `x11view` Package
 
-A lightweight Python package for creating basic or supersampled X11 windows for 2D drawing (circles, arcs, lines, etc.). It uses python-xlib for direct X11 window and Pixmap operations, with an optional Pillow-based supersampling pipeline.
+A lightweight Python package for creating basic or supersampled X11 windows for 2D drawing (circles, arcs, lines, etc.). It uses python-xlib for direct X11 window and Pixmap operations.
 
 **Contents**:
 
@@ -14,10 +14,7 @@ A lightweight Python package for creating basic or supersampled X11 windows for 
 3. [x11view.x11_basic](#x11viewx11_basic)  
    - [Class: X11CanvasBasic](#class-x11canvasbasic)
 
-4. [x11view.x11_ss](#x11viewx11_ss)  
-   - [Class: X11CanvasSS](#class-x11canvasss)
-
-5. [x11view.window](#x11viewwindow)  
+4. [x11view.window](#x11viewwindow)  
    - [Class: X11Window](#class-x11window)  
    - [Function: create_x11_window](#function-create_x11_window)
 
@@ -191,41 +188,6 @@ canvas.flush()
 
 ---
 
-## x11view.x11_ss
-
-### Class: `X11CanvasSS`
-
-**Location**: `x11view/x11_ss.py`  
-**Inheritance**: `X11CanvasBase`, `X11CanvasCommon`
-
-A **Pillow-based** supersampled canvas:
-
-1. **Constructor** creates a high-resolution PIL `Image` (size = `width * ss_factor` by `height * ss_factor`), plus a standard Pixmap for the final displayed image.  
-2. **Drawing** (circles, lines, arcs) is performed on the PIL image at scaled coordinates.  
-3. **`flush()`** downscales the image back to the actual window size, then tiles it into the Pixmap via `put_image`, then copies to the window.
-
-**Constructor**  
-```python
-def __init__(self,
-             x11_window,
-             ss_factor: int = 2,
-             tile_size: int = 128):
-    """
-    :param x11_window: The parent X11Window
-    :param ss_factor:  Supersampling factor (2 => 2x in each dimension)
-    :param tile_size:  Size of tiles for put_image to balance speed/memory
-    """
-```
-
-**Key Methods**  
-- `create_or_resize(width, height)`: Recreate the high-res image and the final Pixmap to match new dimensions.  
-- `clear()`: Fill the PIL buffer and final Pixmap with white.  
-- `flush()`: Downsample the PIL image, convert to BGRA, tile-copy to the Pixmap, and then `copy_area` to the real window.  
-
-**Supersampled Drawing**  
-Methods like `draw_filled_circle(cx, cy, radius, color=...)` multiply all coordinates by `ss_factor` before calling Pillow’s `ellipse`, `line`, or `pieslice`. This yields a smoother final image.
-
----
 
 ## x11view.window
 
@@ -313,7 +275,6 @@ for **2× supersampling** (using Pillow). This will open a window with some test
 - **`X11CanvasBase`** (abstract interface for any X11 canvas)  
 - **`X11CanvasCommon`** (GC caching, color utilities)  
 - **`X11CanvasBasic`** (direct double-buffered Pixmap, no supersampling)  
-- **`X11CanvasSS`** (Pillow-based supersampling approach)  
 - **`X11Window`** (the event loop & window creation)  
 - **`create_x11_window`** (simple factory to pick basic vs. SS approach)
 
