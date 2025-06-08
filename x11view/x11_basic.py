@@ -418,8 +418,19 @@ class X11CanvasBasic(X11CanvasBase, X11CanvasCommon):
                 gc.change(font=font_obj.id)
     
         # Draw the text (will use whatever font we successfully set, or X11's default)
-        self.pixmap.draw_text(gc, x, y, text)
-        
+        try:
+            # Encode the string to ISO-8859-1 for compatibility with X11 core fonts.
+            # This correctly handles symbols like Å and °.
+            encoded_text = text.encode('iso-8859-1')
+            print(f"Succesfully encoded: {encoded_text}")
+            self.pixmap.draw_text(gc, x, y, encoded_text)
+        except UnicodeEncodeError:
+            # If the string contains characters not in ISO-8859-1, fall back
+            # to a safe ASCII representation to avoid crashing.
+            ascii_text = text.encode('ascii', 'replace').decode('ascii')
+            print(f"ASCII fallback: {ascii_text}")
+            self.pixmap.draw_text(gc, x, y, ascii_text)        
+            
     def get_text_dimensions(self, text, font_size=12):
         """
         Estimate the dimensions of text in pixels.

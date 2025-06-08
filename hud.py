@@ -72,4 +72,14 @@ class HUDPanel:
         for i, line in enumerate(self.lines):
             # Calculate the y-coordinate for each line.
             y = canvas.height - self.y_offset - i * self.line_spacing
-            canvas.draw_text(self.x, y, line, color=self.color, font_size=self.font_size)
+
+            try:
+                # Encode the string to ISO-8859-1 for compatibility with X11 core fonts.
+                # This correctly handles symbols like Å and °.
+                encoded_text = line.encode('iso-8859-1')
+            except UnicodeEncodeError:
+                # If the string contains characters not in ISO-8859-1, fall back
+                # to a safe ASCII representation to avoid crashing.
+                encoded_text = text.encode('ascii', 'replace').decode('ascii')
+
+            canvas.draw_text(self.x, y, encoded_text, color=self.color, font_size=self.font_size)
