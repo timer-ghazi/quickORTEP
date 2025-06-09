@@ -9,34 +9,7 @@ Handles geometry extraction, energy parsing, and vibrational frequency analysis.
 import os
 import re
 from .base_parser import TrajectoryParser
-
-
-class NormalMode:
-    """
-    Represents a single vibrational normal mode.
-    Contains frequency, reduced mass, force constant, IR intensity,
-    and displacement vectors for all atoms.
-    """
-    def __init__(self, frequency, reduced_mass, force_constant, ir_intensity, displacements):
-        self.frequency = frequency  # in cm^-1
-        self.reduced_mass = reduced_mass  # in amu
-        self.force_constant = force_constant  # in mdyn/A
-        self.ir_intensity = ir_intensity  # in KM/Mole
-        self.displacements = displacements  # List of (dx, dy, dz) tuples for each atom
-
-
-class FrequencyData:
-    """
-    Container for vibrational frequency data from a Gaussian calculation.
-    Contains the number of atoms and a list of normal modes.
-    """
-    def __init__(self, n_atoms):
-        self.n_atoms = n_atoms
-        self.modes = []  # List of NormalMode objects
-    
-    def add_mode(self, mode):
-        """Add a NormalMode to this frequency data."""
-        self.modes.append(mode)
+from normal_modes import NormalMode, FrequencyData
 
 
 class GaussianTrajectoryParser(TrajectoryParser):
@@ -193,33 +166,60 @@ class GaussianTrajectoryParser(TrajectoryParser):
                     if i >= len(lines):
                         break
                     red_mass_line = lines[i].strip()
-                    if not red_mass_line.startswith("Red. masses --"):
+                    if not "Red. masses" in red_mass_line:
                         i += 1
                         continue
                     red_mass_parts = red_mass_line.split()
-                    reduced_masses = [float(m) for m in red_mass_parts[3:]]  # Skip "Red.", "masses", "--"
+                    # Find "--" and take everything after it
+                    dash_idx = None
+                    for idx, part in enumerate(red_mass_parts):
+                        if "--" in part:
+                            dash_idx = idx + 1
+                            break
+                    if dash_idx is None:
+                        i += 1
+                        continue
+                    reduced_masses = [float(m) for m in red_mass_parts[dash_idx:]]
 
                     # Parse force constants
                     i += 1
                     if i >= len(lines):
                         break
                     frc_const_line = lines[i].strip()
-                    if not frc_const_line.startswith("Frc consts --"):
+                    if not "Frc consts" in frc_const_line:
                         i += 1
                         continue
                     frc_const_parts = frc_const_line.split()
-                    force_constants = [float(f) for f in frc_const_parts[3:]]  # Skip "Frc", "consts", "--"
+                    # Find "--" and take everything after it
+                    dash_idx = None
+                    for idx, part in enumerate(frc_const_parts):
+                        if "--" in part:
+                            dash_idx = idx + 1
+                            break
+                    if dash_idx is None:
+                        i += 1
+                        continue
+                    force_constants = [float(f) for f in frc_const_parts[dash_idx:]]
 
                     # Parse IR intensities
                     i += 1
                     if i >= len(lines):
                         break
                     ir_inten_line = lines[i].strip()
-                    if not ir_inten_line.startswith("IR Inten --"):
+                    if not "IR Inten" in ir_inten_line:
                         i += 1
                         continue
                     ir_inten_parts = ir_inten_line.split()
-                    ir_intensities = [float(ir) for ir in ir_inten_parts[3:]]  # Skip "IR", "Inten", "--"
+                    # Find "--" and take everything after it
+                    dash_idx = None
+                    for idx, part in enumerate(ir_inten_parts):
+                        if "--" in part:
+                            dash_idx = idx + 1
+                            break
+                    if dash_idx is None:
+                        i += 1
+                        continue
+                    ir_intensities = [float(ir) for ir in ir_inten_parts[dash_idx:]]
 
                     # Skip header lines for displacement vectors
                     i += 1

@@ -80,6 +80,6 @@ class HUDPanel:
             except UnicodeEncodeError:
                 # If the string contains characters not in ISO-8859-1, fall back
                 # to a safe ASCII representation to avoid crashing.
-                encoded_text = text.encode('ascii', 'replace').decode('ascii')
+                encoded_text = line.encode('ascii', 'replace').decode('ascii')
 
             canvas.draw_text(self.x, y, encoded_text, color=self.color, font_size=self.font_size)
