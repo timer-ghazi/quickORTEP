@@ -22,7 +22,8 @@ class MessagePanel:
                  font_size=12, bg_color=(240, 240, 240), padding=5):
         self.message_service = message_service
         self.x = x
-        self.y_offset = y_offset  # Increased from default 10 to 30
+        # Vertical offset from the bottom of the canvas (default is 10)
+        self.y_offset = y_offset
         self.line_spacing = line_spacing
         self.font_size = font_size
         self.bg_color = bg_color  # Note: X11 doesn't support alpha transparency
