@@ -594,7 +594,7 @@ class Molecule:
     def _parse_energy(comment_line: str) -> Optional[float]:
         if not comment_line.strip():
             return None
-        labeled_pattern = r"(?i)(?:energy|e)\s*[:=]?\s*([-+]?\d+(\.\d+)?([eE][+-]?\d+)?)"
+        labeled_pattern = r"(?i)\b(?:energy|e)\s*[:=]\s*([-+]?\d+(\.\d+)?([eE][+-]?\d+)?)"
         match = re.search(labeled_pattern, comment_line)
         if match:
             return float(match.group(1))

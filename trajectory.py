@@ -16,6 +16,7 @@ from config import ENERGY_UNITS, DEFAULT_ENERGY_UNIT
 from parsers.base_parser import TrajectoryParser
 from parsers.xyz_parser import XYZTrajectoryParser
 from parsers.gaussian_parser import GaussianTrajectoryParser
+from parsers.orca_parser import ORCATrajectoryParser
 
 
 class Trajectory:
@@ -25,7 +26,7 @@ class Trajectory:
     """
     
     # Register all available parsers
-    _parsers = [XYZTrajectoryParser, GaussianTrajectoryParser]
+    _parsers = [XYZTrajectoryParser, GaussianTrajectoryParser, ORCATrajectoryParser]
     
     def __init__(self, raw_frames, metadata=None):
         """
