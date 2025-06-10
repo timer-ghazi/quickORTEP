@@ -113,14 +113,22 @@ class ORCATrajectoryParser(TrajectoryParser):
                         'cycle': cycle
                     }
         
-        # Parse vibrational frequencies (if present)
-        freq_data = parser_instance._parse_frequencies(file_path)
-        if freq_data is not None:
-            # Attach the entire FrequencyData object to metadata
-            metadata["frequency_data"] = freq_data
-            # Assume freq data belongs to the final geometry frame (last in raw_frames)
-            if raw_frames:
-                metadata["freq_data_frame_index"] = len(raw_frames) - 1
+        # Parse vibrational frequencies with frame associations
+        frequency_associations = parser_instance._parse_frequencies_with_context(file_path, len(raw_frames))
+        if frequency_associations:
+            metadata["frequency_data"] = {}
+            metadata["freq_data_frame_indices"] = []
+            
+            for frame_index, freq_data in frequency_associations:
+                # Ensure frame_index is valid
+                if 0 <= frame_index < len(raw_frames):
+                    metadata["frequency_data"][frame_index] = freq_data
+                    metadata["freq_data_frame_indices"].append(frame_index)
+            
+            # Backward compatibility: if only one frequency dataset, also set the old format
+            if len(frequency_associations) == 1:
+                frame_index, freq_data = frequency_associations[0]
+                metadata["freq_data_frame_index"] = frame_index
         
         return raw_frames, metadata
     
@@ -263,6 +271,275 @@ class ORCATrajectoryParser(TrajectoryParser):
         except:
             return False
     
+    def _parse_frequencies_with_context(self, file_path, num_frames):
+        """
+        Parse vibrational frequencies and associate them with specific geometry frames.
+        
+        Parameters:
+            file_path (str): Path to the ORCA output file
+            num_frames (int): Number of geometry frames found
+            
+        Returns:
+            List[Tuple[int, FrequencyData]]: List of (frame_index, FrequencyData) tuples
+        """
+        try:
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+        except IOError:
+            return []
+        
+        frequency_frame_associations = []
+        
+        # First, find all optimization cycles and frequency sections with their line numbers
+        cycle_positions = {}  # cycle_number -> line_number
+        frequency_positions = []  # List of line_numbers where "VIBRATIONAL FREQUENCIES" appears
+        
+        for i, line in enumerate(lines):
+            # Track optimization cycles
+            if "GEOMETRY OPTIMIZATION CYCLE" in line:
+                cycle_match = re.search(r'CYCLE\s+(\d+)', line)
+                if cycle_match:
+                    cycle_number = int(cycle_match.group(1))
+                    cycle_positions[cycle_number] = i
+            
+            # Track frequency sections
+            elif "VIBRATIONAL FREQUENCIES" in line:
+                frequency_positions.append(i)
+        
+        # Determine number of atoms (needed for frequency parsing)
+        n_atoms = self._determine_atom_count(lines)
+        
+        # For each frequency section, determine which frame it belongs to
+        for freq_line_num in frequency_positions:
+            frame_index = self._determine_frequency_frame_association(
+                freq_line_num, cycle_positions, num_frames
+            )
+            
+            # Parse the frequency data starting from this position
+            freq_data = self._parse_single_frequency_section(lines, freq_line_num, n_atoms)
+            
+            if freq_data and freq_data.modes:
+                frequency_frame_associations.append((frame_index, freq_data))
+        
+        return frequency_frame_associations
+    
+    def _determine_frequency_frame_association(self, freq_line_number, cycle_positions, num_frames):
+        """
+        Determine which frame a frequency section belongs to based on its position
+        relative to optimization cycles.
+        
+        Parameters:
+            freq_line_number (int): Line number where frequency section starts
+            cycle_positions (dict): cycle_number -> line_number mapping
+            num_frames (int): Total number of frames
+            
+        Returns:
+            int: Frame index (0-based) that this frequency section belongs to
+        """
+        if not cycle_positions:
+            # No optimization cycles found, assign to last frame
+            return max(0, num_frames - 1)
+        
+        # If frequency comes before first optimization cycle, assign to first frame
+        min_cycle_line = min(cycle_positions.values())
+        if freq_line_number < min_cycle_line:
+            return 0
+        
+        # Find the most recent cycle before this frequency section
+        most_recent_cycle = 0
+        most_recent_line = 0
+        
+        for cycle_num, cycle_line in cycle_positions.items():
+            if cycle_line < freq_line_number and cycle_line > most_recent_line:
+                most_recent_cycle = cycle_num
+                most_recent_line = cycle_line
+        
+        # Convert cycle number to frame index (cycles are 1-indexed, frames are 0-indexed)
+        frame_index = most_recent_cycle - 1 if most_recent_cycle > 0 else 0
+        
+        # Ensure frame_index is within valid range
+        return min(max(0, frame_index), num_frames - 1)
+    
+    def _determine_atom_count(self, lines):
+        """
+        Determine number of atoms from geometry sections.
+        
+        Parameters:
+            lines (List[str]): All lines from the file
+            
+        Returns:
+            int: Number of atoms
+        """
+        for i, line in enumerate(lines):
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                # Skip header and dashed line
+                j = i + 2
+                atom_count = 0
+                while j < len(lines):
+                    coord_line = lines[j].strip()
+                    if not coord_line or "---" in coord_line or coord_line.startswith("*"):
+                        break
+                    parts = coord_line.split()
+                    if len(parts) >= 4:
+                        atom_count += 1
+                    j += 1
+                if atom_count > 0:
+                    return atom_count
+        
+        return 7  # Default fallback
+    
+    def _parse_single_frequency_section(self, lines, freq_start_line, n_atoms):
+        """
+        Parse a single frequency section starting from the given line.
+        
+        Parameters:
+            lines (List[str]): All lines from the file
+            freq_start_line (int): Line number where "VIBRATIONAL FREQUENCIES" appears
+            n_atoms (int): Number of atoms
+            
+        Returns:
+            FrequencyData: Parsed frequency data, or None if parsing fails
+        """
+        freq_data = FrequencyData(n_atoms)
+        
+        # Parse frequencies starting from the frequency section
+        frequencies = []
+        i = freq_start_line + 1
+        
+        # Find the end of this frequency section (either next "VIBRATIONAL FREQUENCIES" or significant section change)
+        section_end = len(lines)
+        for j in range(freq_start_line + 1, len(lines)):
+            if "VIBRATIONAL FREQUENCIES" in lines[j]:
+                section_end = j
+                break
+            # Look for other major section markers that indicate end of frequency data
+            if any(marker in lines[j] for marker in [
+                "GEOMETRY OPTIMIZATION CYCLE",
+                "FINAL SINGLE POINT ENERGY",
+                "*                     SUCCESS                     *"
+            ]):
+                # Don't immediately break, but if we're past normal modes, then break
+                if j > freq_start_line + 100:  # Reasonable distance past frequency start
+                    section_end = j
+                    break
+        
+        # Parse frequencies within this section
+        while i < section_end:
+            line = lines[i].strip()
+            if line.startswith("NORMAL MODES"):
+                break
+            
+            # Parse frequency lines: "     6:     127.27 cm**-1" or "     6:    -289.80 cm**-1  ***imaginary mode***"
+            if ":" in line and "cm**-1" in line:
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    freq_part = parts[1].strip().replace("cm**-1", "").strip()
+                    # Handle extra text after the frequency (e.g., "***imaginary mode***")
+                    freq_part_clean = freq_part.split()[0] if freq_part.split() else freq_part
+                    try:
+                        freq_value = float(freq_part_clean)
+                        frequencies.append(freq_value)
+                    except ValueError:
+                        pass
+            i += 1
+        
+        # Find normal modes section within this frequency section
+        modes_start = -1
+        for j in range(freq_start_line, section_end):
+            if "NORMAL MODES" in lines[j]:
+                modes_start = j
+                break
+        
+        if modes_start == -1:
+            return freq_data if frequencies else None
+        
+        # Parse normal mode displacement vectors
+        i = modes_start + 1
+        
+        # Skip description lines until we find the mode header
+        while i < section_end:
+            line = lines[i].strip()
+            # Look for mode header like "                  0          1          2          3          4          5"
+            if re.match(r'\s*\d+\s+\d+\s+\d+', line):
+                break
+            i += 1
+        
+        # Parse mode blocks within this section
+        while i < section_end:
+            line = lines[i].strip()
+            
+            # Check for mode header line (mode numbers with lots of spacing)
+            if re.match(r'\s*\d+\s+\d+\s+\d+', line):
+                # Parse mode numbers from header
+                mode_numbers = [int(x) for x in line.split()]
+                n_modes = len(mode_numbers)
+                
+                if n_modes == 0:
+                    i += 1
+                    continue
+                
+                # Initialize displacement arrays for each mode (N atoms × 3 coordinates)
+                mode_displacements = [[[0.0, 0.0, 0.0] for _ in range(n_atoms)] for _ in range(n_modes)]
+                
+                # Parse displacement vectors (3N lines for N atoms)
+                i += 1
+                coord_count = 0
+                
+                while i < section_end and coord_count < 3 * n_atoms:
+                    disp_line = lines[i].strip()
+                    
+                    # Stop if we hit another mode block or end
+                    if re.match(r'\s*\d+\s+\d+\s+\d+', disp_line) or not disp_line:
+                        break
+                    
+                    parts = disp_line.split()
+                    if len(parts) >= n_modes + 1:  # coord_idx + mode values
+                        try:
+                            coord_idx = int(parts[0])  # First column is coordinate index
+                            atom_idx = coord_idx // 3  # Which atom (0, 1, 2, ...)
+                            coord_component = coord_idx % 3  # Which coordinate (0=x, 1=y, 2=z)
+                            
+                            # Extract displacement values for each mode
+                            for mode_idx in range(n_modes):
+                                displacement_val = float(parts[mode_idx + 1])
+                                
+                                if atom_idx < n_atoms:
+                                    mode_displacements[mode_idx][atom_idx][coord_component] = displacement_val
+                            
+                            coord_count += 1
+                        except (ValueError, IndexError):
+                            pass
+                    
+                    i += 1
+                
+                # Create NormalMode objects for each mode in this block
+                for mode_idx, mode_num in enumerate(mode_numbers):
+                    if mode_num < len(frequencies):
+                        frequency = frequencies[mode_num]
+                        
+                        # Convert displacement format: [[x,y,z], [x,y,z], ...] -> [(x,y,z), (x,y,z), ...]
+                        displacements = []
+                        if mode_idx < len(mode_displacements):
+                            for atom_disp in mode_displacements[mode_idx]:
+                                displacements.append((atom_disp[0], atom_disp[1], atom_disp[2]))
+                        
+                        # ORCA doesn't provide reduced mass, force constant, or IR intensity directly
+                        # Set default values (could be enhanced to parse these if available)
+                        mode = NormalMode(
+                            frequency=frequency,
+                            reduced_mass=1.0,  # Default value
+                            force_constant=0.0,  # Default value
+                            ir_intensity=0.0,  # Default value
+                            displacements=displacements
+                        )
+                        freq_data.add_mode(mode)
+                
+                continue
+            
+            i += 1
+        
+        return freq_data if freq_data.modes else None
+
     def _parse_frequencies(self, file_path):
         """
         Parse vibrational frequencies from an ORCA output file.
@@ -320,13 +597,15 @@ class ORCATrajectoryParser(TrajectoryParser):
             if line.startswith("NORMAL MODES"):
                 break
             
-            # Parse frequency lines: "     6:     127.27 cm**-1"
+            # Parse frequency lines: "     6:     127.27 cm**-1" or "     6:    -289.80 cm**-1  ***imaginary mode***"
             if ":" in line and "cm**-1" in line:
                 parts = line.split(":")
                 if len(parts) >= 2:
                     freq_part = parts[1].strip().replace("cm**-1", "").strip()
+                    # Handle extra text after the frequency (e.g., "***imaginary mode***")
+                    freq_part_clean = freq_part.split()[0] if freq_part.split() else freq_part
                     try:
-                        freq_value = float(freq_part)
+                        freq_value = float(freq_part_clean)
                         frequencies.append(freq_value)
                     except ValueError:
                         pass

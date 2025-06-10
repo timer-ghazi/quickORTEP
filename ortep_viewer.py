@@ -66,21 +66,51 @@ class _NormalModeManager:
         self.current_normal_mode_index = 0
         self.normal_mode_scale_factor = 1.0
         self.has_normal_modes = False
+        self.normal_mode_data_by_frame = {}  # Dict: frame_index -> FrequencyData
+        # Filtered mode tracking
+        self.current_filtered_modes = []  # Current frame's filtered modes
+        self.current_mode_indices = []   # Original indices of filtered modes
+        # Backward compatibility attributes
         self.normal_mode_data = None
         self.normal_mode_frame_index = None
     
     def initialize_from_trajectory(self, trajectory):
         """Initialize normal mode data from trajectory metadata."""
         self.has_normal_modes = False
+        self.normal_mode_data_by_frame = {}
         self.normal_mode_data = None
         self.normal_mode_frame_index = None
         
         if 'frequency_data' in trajectory.metadata:
-            self.normal_mode_data = trajectory.metadata['frequency_data']
-            self.normal_mode_frame_index = trajectory.metadata.get('freq_data_frame_index', None)
-            if self.normal_mode_data and self.normal_mode_frame_index is not None:
+            freq_data = trajectory.metadata['frequency_data']
+            
+            if isinstance(freq_data, dict):
+                # New format: multiple frequency datasets
+                self.normal_mode_data_by_frame = freq_data
+                self.has_normal_modes = bool(freq_data)
+                
+                if freq_data:
+                    frame_indices = sorted(freq_data.keys())
+                    self.viewer.message_service.log_info(
+                        f"Normal mode data available for frames: {', '.join(map(str, frame_indices))}"
+                    )
+                
+                # Backward compatibility: set old attributes for first available frame
+                if freq_data:
+                    first_frame = min(freq_data.keys())
+                    self.normal_mode_data = freq_data[first_frame]
+                    self.normal_mode_frame_index = first_frame
+            else:
+                # Old format: single frequency dataset
+                frame_index = trajectory.metadata.get('freq_data_frame_index', 
+                                                     len(trajectory._raw_frames) - 1)
+                self.normal_mode_data_by_frame[frame_index] = freq_data
                 self.has_normal_modes = True
-                self.viewer.message_service.log_info(f"Normal mode data available for frame {self.normal_mode_frame_index}")
+                self.normal_mode_data = freq_data
+                self.normal_mode_frame_index = frame_index
+                self.viewer.message_service.log_info(
+                    f"Normal mode data available for frame {frame_index}"
+                )
 
     def toggle_normal_modes(self):
         """Toggle display of normal mode vectors."""
@@ -88,10 +118,22 @@ class _NormalModeManager:
             self.viewer.message_service.log_info("No normal modes available")
             return
 
-        # Only allow showing normal modes on the frame that has the data
-        if self.viewer.current_frame != self.normal_mode_frame_index:
-            self.viewer.message_service.log_info(f"Normal modes only available for frame {self.normal_mode_frame_index}")
+        # Get filtered modes for current frame (skip zero frequencies)
+        filtered_modes, mode_indices = self.get_filtered_modes_for_frame(self.viewer.current_frame)
+        if not filtered_modes:
+            available_frames = sorted(self.normal_mode_data_by_frame.keys())
+            self.viewer.message_service.log_info(
+                f"No significant normal modes for frame {self.viewer.current_frame}. Available on frames: {', '.join(map(str, available_frames))}"
+            )
             return
+        
+        # Update current filtered data
+        self.current_filtered_modes = filtered_modes
+        self.current_mode_indices = mode_indices
+        
+        # Reset mode index if out of range
+        if self.current_normal_mode_index >= len(filtered_modes):
+            self.current_normal_mode_index = 0
         
         # Toggle display state
         self.show_normal_modes = not self.show_normal_modes
@@ -99,11 +141,13 @@ class _NormalModeManager:
         if self.show_normal_modes:
             # Create vectors for the current normal mode
             self.create_normal_mode_vectors()
-            mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+            mode = filtered_modes[self.current_normal_mode_index]
             freq_text = f"{abs(mode.frequency):.1f} cm⁻¹"
             if mode.frequency < 0:
                 freq_text = f"{freq_text} (imaginary)"
-            self.viewer.message_service.log_info(f"Showing normal mode {self.current_normal_mode_index + 1}/{len(self.normal_mode_data.modes)}: {freq_text}")
+            self.viewer.message_service.log_info(
+                f"Showing normal mode {self.current_normal_mode_index + 1}/{len(filtered_modes)}: {freq_text}"
+            )
         else:
             # Clear normal mode vectors
             self.clear_normal_mode_vectors()
@@ -120,22 +164,66 @@ class _NormalModeManager:
         """
         if not self.has_normal_modes or not self.show_normal_modes:
             return
+        
+        # Use current filtered modes
+        if not self.current_filtered_modes:
+            return
             
         # Update the current normal mode index
-        num_modes = len(self.normal_mode_data.modes)
+        num_modes = len(self.current_filtered_modes)
         self.current_normal_mode_index = (self.current_normal_mode_index + direction) % num_modes
         
         # Create vectors for the new current mode
         self.create_normal_mode_vectors()
         
         # Log information about the current mode
-        mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+        mode = self.current_filtered_modes[self.current_normal_mode_index]
         freq_text = f"{abs(mode.frequency):.1f} cm⁻¹"
         if mode.frequency < 0:
             freq_text = f"{freq_text} (imaginary)"
         self.viewer.message_service.log_info(f"Normal mode {self.current_normal_mode_index + 1}/{num_modes}: {freq_text}")
         
         self.viewer.redraw()
+
+    def get_normal_modes_for_frame(self, frame_index):
+        """
+        Get normal mode data for a specific frame.
+        
+        Parameters:
+            frame_index (int): Frame index to get normal modes for
+            
+        Returns:
+            FrequencyData: Normal mode data for the frame, or None if not available
+        """
+        return self.normal_mode_data_by_frame.get(frame_index, None)
+
+    def get_filtered_modes_for_frame(self, frame_index, min_frequency=0.1):
+        """
+        Get normal mode data for a specific frame, filtering out zero/near-zero frequencies.
+        
+        Parameters:
+            frame_index (int): Frame index to get normal modes for
+            min_frequency (float): Minimum frequency to include (cm⁻¹)
+            
+        Returns:
+            tuple: (filtered_modes, mode_indices) where:
+                - filtered_modes: List of NormalMode objects with significant frequencies
+                - mode_indices: List of original indices of the filtered modes
+        """
+        freq_data = self.get_normal_modes_for_frame(frame_index)
+        if not freq_data:
+            return [], []
+        
+        filtered_modes = []
+        mode_indices = []
+        
+        for i, mode in enumerate(freq_data.modes):
+            # Include modes with significant frequency (positive or negative, but not near zero)
+            if abs(mode.frequency) >= min_frequency:
+                filtered_modes.append(mode)
+                mode_indices.append(i)
+        
+        return filtered_modes, mode_indices
 
     def adjust_normal_mode_scale(self, factor):
         """
@@ -169,9 +257,13 @@ class _NormalModeManager:
         
         if not self.has_normal_modes or not self.show_normal_modes:
             return
+        
+        # Use current filtered modes
+        if not self.current_filtered_modes:
+            return
             
-        # Get the current normal mode
-        mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+        # Get the current normal mode from filtered list
+        mode = self.current_filtered_modes[self.current_normal_mode_index]
         
         # Set colors based on whether the mode is imaginary
         if mode.frequency < 0:
@@ -237,19 +329,24 @@ class _NormalModeManager:
     def update_info_message(self, lines):
         """Add normal mode information to the HUD lines."""
         if self.has_normal_modes:
-            if self.viewer.current_frame == self.normal_mode_frame_index:
+            filtered_modes, _ = self.get_filtered_modes_for_frame(self.viewer.current_frame)
+            
+            if filtered_modes:
                 if self.show_normal_modes:
-                    mode = self.normal_mode_data.modes[self.current_normal_mode_index]
+                    mode = self.current_filtered_modes[self.current_normal_mode_index]
                     freq_text = f"{abs(mode.frequency):.1f} cm⁻¹"
                     if mode.frequency < 0:
                         freq_text = f"{freq_text} (imaginary)"
-                    lines.append(f"Normal mode {self.current_normal_mode_index + 1}/{len(self.normal_mode_data.modes)}: {freq_text}")
+                    lines.append(f"Normal mode {self.current_normal_mode_index + 1}/{len(filtered_modes)}: {freq_text}")
                     lines.append(f"IR intensity: {mode.ir_intensity:.1f} KM/mol | Scale: {self.normal_mode_scale_factor:.1f}")
                     lines.append("Press ',' / '.' to cycle modes, '<' / '>' to adjust scale")
                 else:
-                    lines.append("Normal modes available. Press 'v' to view.")
-            elif self.normal_mode_frame_index is not None:
-                lines.append(f"Normal modes available on frame {self.normal_mode_frame_index}")
+                    lines.append(f"Normal modes available ({len(filtered_modes)} significant). Press 'v' to view.")
+            else:
+                # Show which frames have normal mode data
+                available_frames = sorted(self.normal_mode_data_by_frame.keys())
+                if available_frames:
+                    lines.append(f"Normal modes available on frames: {', '.join(map(str, available_frames))}")
         
         return lines
 
@@ -1196,8 +1293,10 @@ class MoleculeViewer(X11Window):
             self.ortep_mol.create_coordinate_axes()
             
         # Show normal mode prompt if available for this frame
-        if self._normal_mode_manager.has_normal_modes and frame_index == self._normal_mode_manager.normal_mode_frame_index:
-            self.message_service.log_info(f"Normal modes available for this frame. Press 'v' to view.")
+        if self._normal_mode_manager.has_normal_modes:
+            current_freq_data = self._normal_mode_manager.get_normal_modes_for_frame(frame_index)
+            if current_freq_data:
+                self.message_service.log_info(f"Normal modes available for this frame. Press 'v' to view.")
 
         self.redraw()
 

@@ -126,8 +126,10 @@ def main():
     viewer.fit_molecule_to_window()  # Adjust zoom and centering so the molecule fits
 
     # Show normal mode prompt if on the appropriate frame
-    if viewer._normal_mode_manager.has_normal_modes and viewer.current_frame == viewer._normal_mode_manager.normal_mode_frame_index:
-        viewer.message_service.log_info("Normal modes available for this frame. Press 'v' to view.")
+    if viewer._normal_mode_manager.has_normal_modes:
+        current_freq_data = viewer._normal_mode_manager.get_normal_modes_for_frame(viewer.current_frame)
+        if current_freq_data:
+            viewer.message_service.log_info("Normal modes available for this frame. Press 'v' to view.")
     
     viewer.run()
 

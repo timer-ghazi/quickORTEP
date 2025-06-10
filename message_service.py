@@ -3,6 +3,25 @@
 import time
 from config import MESSAGE_TYPES
 
+SUP_TRANSLATE = str.maketrans({
+    '\u207B': '-',   # ⁻  superscript minus
+    '\u2070': '0',   # ⁰
+    '\u00B9': '1',   # ¹
+    '\u00B2': '2',   # ²
+    '\u00B3': '3',   # ³
+    '\u2074': '4',   # ⁴
+    '\u2075': '5',   # ⁵
+    '\u2076': '6',   # ⁶
+    '\u2077': '7',   # ⁷
+    '\u2078': '8',   # ⁸
+    '\u2079': '9',   # ⁹
+    # add subscripts (U+208x) or anything else you need
+})
+
+def strip_superscripts(text: str) -> str:
+    return text.translate(SUP_TRANSLATE)
+
+
 class MessageService:
     """
     MessageService manages a queue of timestamped messages for the ORTEP viewer.
@@ -50,7 +69,8 @@ class MessageService:
         Parameters:
           - message (str): The information message to log
         """
-        self._add_message("info", message)
+
+        self._add_message("info", strip_superscripts(message))
         print(f" {message}")
     
     def log_warning(self, message):
