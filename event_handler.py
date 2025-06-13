@@ -525,7 +525,31 @@ class _EventHandler:
             self.viewer.selected_bonds = new_bonds
     
     def _toggle_selected_atoms_bond(self):
-        """Toggle a bond between two selected atoms."""
+        """Toggle a bond between two selected atoms OR remove a selected bond."""
+        # Case 1: Single bond selected - remove it and select its atoms
+        if len(self.viewer.selected_bonds) == 1 and len(self.viewer.selected_atoms) == 0:
+            bond = self.viewer.selected_bonds[0]
+            atom1, atom2 = bond.atom1, bond.atom2
+            
+            # Remove the bond
+            self.viewer.ortep_mol.remove_bond(bond)
+            self.viewer.bond_edit_tracker.remove_bond(atom1.index, atom2.index)
+            
+            # Clear bond selection
+            self._clear_bond_selections()
+            
+            # Select the two atoms that were connected
+            atom1.selected = True
+            atom2.selected = True
+            self.viewer.selected_atoms = [atom1, atom2]
+            self.viewer.selected_atom_indices = [atom1.index, atom2.index]
+            
+            self.viewer.message_service.log_info(
+                f"Removed bond {atom1.symbol}{atom1.index}-{atom2.symbol}{atom2.index}, selected atoms"
+            )
+            return
+        
+        # Case 2: Two atoms selected - existing functionality
         if len(self.viewer.selected_atoms) == 2:
             atom1, atom2 = self.viewer.selected_atoms
             toggled = toggle_bond(atom1, atom2, self.viewer.ortep_mol)
