@@ -101,7 +101,7 @@ class _EventHandler:
             'a': self._toggle_axes,  # Add axes toggle command
             't': self._standard_orientation, # Standard orientation (current frame)
             'T': self._standard_orientation_all, # Standard orientation (all frames)
-            '3': self._toggle_3d_effects,  # Toggle 3D effects (highlights and shadows)
+            '3': self._toggle_3d_effects,  # Cycle 3D effects (Off → Highlights → Shadows → Both)
             'f': self._toggle_fog_mode,     # Toggle fog mode (OFF/ON)
             '(': self._adjust_fog_density_down,  # Decrease fog density
             ')': self._adjust_fog_density_up,    # Increase fog density
@@ -464,7 +464,7 @@ class _EventHandler:
         self.viewer.toggle_axes()
         
     def _toggle_3d_effects(self):
-        """Toggle 3D effects (atom highlights and shadows)."""
+        """Cycle through 3D effects (Off → Highlights → Shadows → Both)."""
         self.viewer.toggle_3d_effects()
         
     def _toggle_atom_labels(self):

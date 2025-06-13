@@ -1007,21 +1007,46 @@ class _ViewManager:
         self.viewer.set_frame(self.viewer.current_frame)
         
     def toggle_3d_effects(self):
-        """Toggle 3D effects (atom highlights and shadows) on and off."""
+        """Cycle through 3D effects: Off → Highlights → Shadows → Both → Off"""
         from config import ATOM_STYLE
         
-        # Toggle both highlight and shadow settings
-        ATOM_STYLE["highlight"]["enabled"] = not ATOM_STYLE["highlight"]["enabled"]
-        ATOM_STYLE["shadow"]["enabled"] = not ATOM_STYLE["shadow"]["enabled"]
+        # Define the four states
+        STATES = {
+            'OFF': (False, False),
+            'HIGHLIGHTS_ONLY': (True, False), 
+            'SHADOWS_ONLY': (False, True),
+            'BOTH_ON': (True, True)
+        }
         
-        # Get current state for message
-        enabled = ATOM_STYLE["highlight"]["enabled"]
-        status = "enabled" if enabled else "disabled"
+        # Get current state
+        current_highlight = ATOM_STYLE["highlight"]["enabled"]
+        current_shadow = ATOM_STYLE["shadow"]["enabled"]
+        current_state = (current_highlight, current_shadow)
         
-        # Log message to user
-        self.viewer.message_service.log_info(f"3D effects {status}")
+        # Determine next state in cycle
+        if current_state == STATES['OFF']:
+            next_state = 'HIGHLIGHTS_ONLY'
+        elif current_state == STATES['HIGHLIGHTS_ONLY']:
+            next_state = 'SHADOWS_ONLY'
+        elif current_state == STATES['SHADOWS_ONLY']:
+            next_state = 'BOTH_ON'
+        else:  # BOTH_ON or any other state
+            next_state = 'OFF'
         
-        # Redraw to apply changes
+        # Apply the new state
+        highlight_enabled, shadow_enabled = STATES[next_state]
+        ATOM_STYLE["highlight"]["enabled"] = highlight_enabled
+        ATOM_STYLE["shadow"]["enabled"] = shadow_enabled
+        
+        # User feedback with descriptive message
+        state_messages = {
+            'OFF': "3D effects disabled",
+            'HIGHLIGHTS_ONLY': "Highlights enabled",
+            'SHADOWS_ONLY': "Shadows enabled", 
+            'BOTH_ON': "Highlights and shadows enabled"
+        }
+        
+        self.viewer.message_service.log_info(state_messages[next_state])
         self.viewer.redraw()
 
     def fit_molecule_to_window(self):
