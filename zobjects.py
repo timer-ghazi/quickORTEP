@@ -138,14 +138,18 @@ class ZAtom(ZObject):
             
             # Calculate highlight color based on atom color (use the overridden color if provided)
             base_r, base_g, base_b = atom_color
-            if use_white_for_dark and (base_r + base_g + base_b) / 3 < 100:
+            # Use perceptual luminance instead of simple RGB average (ITU-R BT.709 coefficients)
+            luminance = 0.299 * base_r + 0.587 * base_g + 0.114 * base_b
+            if use_white_for_dark and luminance < 70:
                 # For dark atoms, use white highlight
                 highlight_color = (255, 255, 255)
             else:
-                # For lighter atoms, use a brightened version of atom color
-                highlight_r = min(255, int(base_r * brightness_factor))
-                highlight_g = min(255, int(base_g * brightness_factor))
-                highlight_b = min(255, int(base_b * brightness_factor))
+                # For lighter atoms, create a light tinted highlight by blending with white
+                # This works better for saturated colors like pure red oxygen
+                white_blend_factor = 0.6  # Blend 60% white with 40% original color
+                highlight_r = min(255, int(base_r * (1 - white_blend_factor) + 255 * white_blend_factor))
+                highlight_g = min(255, int(base_g * (1 - white_blend_factor) + 255 * white_blend_factor))
+                highlight_b = min(255, int(base_b * (1 - white_blend_factor) + 255 * white_blend_factor))
                 highlight_color = (highlight_r, highlight_g, highlight_b)
             
             # Draw the highlight
