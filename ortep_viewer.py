@@ -390,6 +390,10 @@ class _GraphManager:
     
             if len(energies) == 0 or np.isnan(energies).all():
                 return
+            
+            # For single-point calculations, don't show energy graph since there's only one point
+            if len(energies) == 1:
+                return
     
             # Check if coordinate or time metadata is available for the x-axis.
             coords, coord_info = self.viewer.trajectory.coordinate_trajectory(skip_none=False)

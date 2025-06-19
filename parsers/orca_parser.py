@@ -85,9 +85,13 @@ class ORCATrajectoryParser(TrajectoryParser):
         energies = cls._parse_energies(file_path)
         geometries = cls._parse_geometries(file_path)
         
-        # Check if optimization converged
+        # Check if optimization converged and determine calculation type
         converged = cls._check_convergence(file_path)
         metadata['converged'] = converged
+        
+        # Determine calculation type based on number of geometries and convergence
+        is_single_point = len(geometries) == 1 and len(energies) == 1
+        calc_type = "Single Point" if is_single_point else "Optimization"
         
         # Convert to XYZ format frames
         raw_frames = []
@@ -101,7 +105,7 @@ class ORCATrajectoryParser(TrajectoryParser):
                 
                 if geometry:
                     # Convert to XYZ format
-                    xyz_frame = cls._convert_to_xyz(geometry, energy_value, cycle)
+                    xyz_frame = cls._convert_to_xyz(geometry, energy_value, cycle, calc_type)
                     raw_frames.append(xyz_frame)
                     
                     # Store energy info in metadata for later reference
@@ -109,7 +113,7 @@ class ORCATrajectoryParser(TrajectoryParser):
                         metadata['energy_data'] = {}
                     metadata['energy_data'][len(raw_frames)-1] = {
                         'value': energy_value,
-                        'type': 'DFT',
+                        'type': calc_type,
                         'cycle': cycle
                     }
         
@@ -159,20 +163,24 @@ class ORCATrajectoryParser(TrajectoryParser):
     @classmethod
     def _parse_geometries(cls, file_path):
         """
-        Parse geometries from ORCA optimization cycles.
-        Returns a list of geometry blocks (one per cycle)
+        Parse geometries from ORCA optimization cycles or single-point calculations.
+        Returns a list of geometry blocks (one per cycle or one for single-point)
         """
         geometries = []
         
         with open(file_path, 'r') as f:
             lines = f.readlines()
         
+        # First pass: look for optimization cycles
         i = 0
+        found_optimization_cycles = False
+        
         while i < len(lines):
             line = lines[i].strip()
             
             # Look for geometry optimization cycle headers
             if "GEOMETRY OPTIMIZATION CYCLE" in line:
+                found_optimization_cycles = True
                 # Skip to the cartesian coordinates section
                 while i < len(lines) and "CARTESIAN COORDINATES (ANGSTROEM)" not in lines[i]:
                     i += 1
@@ -188,35 +196,72 @@ class ORCATrajectoryParser(TrajectoryParser):
                     i += 1
                 
                 # Parse atom coordinates
-                geometry = []
-                while i < len(lines):
-                    coord_line = lines[i].strip()
-                    if not coord_line or "---" in coord_line or coord_line.startswith("*"):
-                        break
-                    
-                    parts = coord_line.split()
-                    if len(parts) >= 4:
-                        try:
-                            symbol = parts[0]
-                            x = float(parts[1])
-                            y = float(parts[2]) 
-                            z = float(parts[3])
-                            geometry.append((symbol, x, y, z))
-                        except (ValueError, IndexError):
-                            break
-                    else:
-                        break
+                geometry = cls._parse_coordinate_block(lines, i)
+                if geometry['coords']:
+                    geometries.append(geometry['coords'])
+                    i = geometry['next_index']
+                else:
                     i += 1
+            else:
+                i += 1
+        
+        # If no optimization cycles found, look for single-point geometry
+        if not found_optimization_cycles:
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
                 
-                if geometry:
-                    geometries.append(geometry)
-            
-            i += 1
+                # Look for cartesian coordinates section (single-point case)
+                if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                    # Skip the header line
+                    i += 1
+                    
+                    # Skip dashed line
+                    if i < len(lines) and "---" in lines[i]:
+                        i += 1
+                    
+                    # Parse atom coordinates
+                    geometry = cls._parse_coordinate_block(lines, i)
+                    if geometry['coords']:
+                        geometries.append(geometry['coords'])
+                        break  # For single-point, we only expect one geometry
+                
+                i += 1
         
         return geometries
     
+    @classmethod
+    def _parse_coordinate_block(cls, lines, start_index):
+        """
+        Parse a block of atomic coordinates starting from start_index.
+        Returns dict with 'coords' (list of tuples) and 'next_index'
+        """
+        geometry = []
+        i = start_index
+        
+        while i < len(lines):
+            coord_line = lines[i].strip()
+            if not coord_line or "---" in coord_line or coord_line.startswith("*"):
+                break
+            
+            parts = coord_line.split()
+            if len(parts) >= 4:
+                try:
+                    symbol = parts[0]
+                    x = float(parts[1])
+                    y = float(parts[2]) 
+                    z = float(parts[3])
+                    geometry.append((symbol, x, y, z))
+                except (ValueError, IndexError):
+                    break
+            else:
+                break
+            i += 1
+        
+        return {'coords': geometry, 'next_index': i}
+    
     @staticmethod
-    def _convert_to_xyz(geometry, energy_value, cycle):
+    def _convert_to_xyz(geometry, energy_value, cycle, calc_type="DFT"):
         """
         Convert an ORCA geometry block to XYZ format
         
@@ -224,15 +269,22 @@ class ORCATrajectoryParser(TrajectoryParser):
             geometry: List of tuples (symbol, x, y, z)
             energy_value: The energy value in Hartree
             cycle: The optimization cycle number
+            calc_type: Type of calculation ("Single Point", "Optimization", etc.)
             
         Returns:
             List of strings in XYZ format
         """
         num_atoms = len(geometry)
         
+        # For single-point calculations, don't show "Cycle 1", just show the type
+        if calc_type == "Single Point":
+            comment_line = f"Energy= {energy_value} | Type: {calc_type}"
+        else:
+            comment_line = f"Cycle {cycle} | Energy= {energy_value} | Type: {calc_type}"
+        
         xyz_frame = [
             str(num_atoms),
-            f"Cycle {cycle} | Energy= {energy_value} | Type: DFT"
+            comment_line
         ]
         
         for atom_data in geometry:
